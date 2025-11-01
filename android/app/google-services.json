@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "429602903859",
+    "project_id": "laour-etf-app",
+    "storage_bucket": "laour-etf-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:429602903859:android:50633d9c181bd2f0f81046",
+        "android_client_info": {
+          "package_name": "com.example.laour_etf"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC07mT1N8fvCEOoKYKm-owMBEwJR_pwfLE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
