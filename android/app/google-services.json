@@ -12,7 +12,16 @@
           "package_name": "com.example.laour_etf"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "429602903859-c7ob1104i8vj3ds0c63elvemfk07pam9.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.laour_etf",
+            "certificate_hash": "6ffab50d72a866e3edcc98922980696c650caa09"
+          }
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyC07mT1N8fvCEOoKYKm-owMBEwJR_pwfLE"
