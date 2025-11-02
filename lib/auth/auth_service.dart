@@ -26,29 +26,32 @@ class AuthService with ChangeNotifier {
     notifyListeners();
   }
 
-  // (★핵심 수정★) 로그인 로직
+  // (★핵심 추가★) "다른 계정으로 로그인" 버그 해결용
+  // 꼬여버린 로딩/에러 상태를 강제로 초기화합니다.
+  void clearState() {
+    _isLoading = false;
+    _errorMessage = '';
+    notifyListeners();
+  }
+
+  // (수정 없음) 로그인 로직
   Future<bool> signIn(String email, String password) async {
     _setLoading(true);
     _setError('');
 
     try {
       await _auth.signInWithEmailAndPassword(email: email, password: password);
-      
-      // (★핵심 수정★)
-      // 로그인 '성공' 시 _setLoading(false)를 호출하지 않습니다!
-      // AuthWrapper가 화면을 전환할 것이므로 UI를 건드리지 않습니다.
-      return true; // 성공
-
+      // 로그인 성공 시 _setLoading(false) 호출 안 함
+      return true;
     } on FirebaseAuthException catch (e) {
-      // (★핵심 수정★)
-      // 로그인 '실패' 시에만 _setLoading(false)를 호출합니다.
+      // 로그인 실패 시에만 _setLoading(false) 호출
       _setError('로그인 실패: ${e.message}');
       _setLoading(false);
-      return false; // 실패
+      return false;
     }
   }
 
-  // (★핵심 수정★) 회원가입 로직
+  // (수정 없음) 회원가입 로직
   Future<bool> signUp(BuildContext context, String name, String email, String password) async {
     _setLoading(true);
     _setError('');
@@ -67,29 +70,22 @@ class AuthService with ChangeNotifier {
         'uid': userCredential.user!.uid,
       });
 
-      // 3. (★핵심 수정★) "아니요" 옵션 삭제 -> '무조건 저장'
+      // 3. '무조건 저장'
       await _storageService.saveAccount(email, password);
       
-      // 4. (★핵심 수정★)
-      // 회원가입 '성공' 시 _setLoading(false)를 호출하지 않습니다!
-      // SignupScreen이 스택을 리셋할 것입니다.
-      return true; // 성공
+      // 회원가입 성공 시 _setLoading(false) 호출 안 함
+      return true;
 
     } on FirebaseAuthException catch (e) {
-      // (★핵심 수정★)
-      // 회원가입 '실패' 시에만 _setLoading(false)를 호출합니다.
+      // 회원가입 실패 시에만 _setLoading(false) 호출
       _setError('회원가입 실패: ${e.message}');
       _setLoading(false);
-      return false; // 실패
+      return false;
     }
   }
 
-  // (수정 없음)
+  // (수정 없음) 로그아웃
   Future<void> signOut() async {
     await _auth.signOut();
   }
-
-  // (★핵심 수정★)
-  // 팝업 로직이 더 이상 필요 없으므로 함수를 '삭제'합니다.
-  // Future<bool> _showSaveAccountDialog(...) { ... }
 }

@@ -2,9 +2,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:laour_etf/auth/auth_wrapper.dart'; // (★추가★)
+import 'package:laour_etf/auth/auth_wrapper.dart';
 import 'package:laour_etf/auth/secure_storage_service.dart';
 import 'package:laour_etf/screens/login_screen.dart';
+import 'package:laour_etf/auth/auth_service.dart'; // (★핵심 추가★)
+import 'package:provider/provider.dart'; // (★핵심 추가★)
 
 class AccountPickerScreen extends StatefulWidget {
   final List<String> savedEmails;
@@ -18,7 +20,7 @@ class _AccountPickerScreenState extends State<AccountPickerScreen> {
   final SecureStorageService _storageService = SecureStorageService();
   bool _isLoggingIn = false;
 
-  // (수정 없음) 원터치 로그인
+  // 원터치 로그인
   void _loginWithSavedAccount(String email) async {
     if (_isLoggingIn) return;
     setState(() => _isLoggingIn = true);
@@ -28,16 +30,18 @@ class _AccountPickerScreenState extends State<AccountPickerScreen> {
       if (password == null) throw Exception("저장된 비밀번호를 찾을 수 없습니다.");
       await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: password);
     } catch (e) {
-      setState(() => _isLoggingIn = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('자동 로그인 실패: ${e.toString()}')),
-      );
+      // SecurityException이 여기서 터져도 잡도록 수정
+      if (mounted) {
+        setState(() => _isLoggingIn = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('자동 로그인 실패: ${e.toString()}')),
+        );
+      }
     }
   }
 
-  // (★핵심 추가★) 계정 삭제 로직
+  // (비활성화된 함수)
   void _deleteAccount(String email) async {
-    // 1. 확인 팝업 (선택 사항이지만 권장)
     bool confirmDelete = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -51,16 +55,20 @@ class _AccountPickerScreenState extends State<AccountPickerScreen> {
     ) ?? false;
 
     if (confirmDelete) {
-      // 2. 보안 저장소에서 삭제
-      await _storageService.deleteAccount(email);
-
-      // 3. (★핵심★) 화면 새로고침
-      // AuthWrapper를 다시 로드하여 변경사항(계정 목록)을 반영합니다.
-      if (mounted) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => const AuthWrapper()),
-          (route) => false,
-        );
+      try { // SecurityException 방어
+        await _storageService.deleteAccount(email);
+        if (mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const AuthWrapper()),
+            (route) => false,
+          );
+        }
+      } catch (e) {
+         if (mounted) {
+           ScaffoldMessenger.of(context).showSnackBar(
+             SnackBar(content: Text('삭제 실패 (환경 설정 오류): ${e.toString()}')),
+           );
+         }
       }
     }
   }
@@ -90,10 +98,10 @@ class _AccountPickerScreenState extends State<AccountPickerScreen> {
                       title: Text(email),
                       leading: const Icon(Icons.account_circle),
                       onTap: () => _loginWithSavedAccount(email),
-                      // (★핵심 추가★) 삭제 버튼
+                      // (삭제 버튼 비활성화)
                       trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline, color: Colors.red),
-                        onPressed: () => _deleteAccount(email),
+                        icon: const Icon(Icons.delete_outline, color: Colors.grey),
+                        onPressed: null, // ★★★ 비활성화 ★★★
                       ),
                     ),
                   );
@@ -102,8 +110,14 @@ class _AccountPickerScreenState extends State<AccountPickerScreen> {
             ),
             if (_isLoggingIn) const Center(child: CircularProgressIndicator()),
             const SizedBox(height: 20),
+            
+            // (★핵심 수정★) "다른 계정으로 로그인" 버튼
             OutlinedButton(
               onPressed: () {
+                // "빙글빙글" 버그를 막기 위해
+                // LoginScreen으로 가기 '전'에 AuthService의 꼬인 상태를 초기화합니다.
+                context.read<AuthService>().clearState();
+                
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(builder: (context) => const LoginScreen()),
