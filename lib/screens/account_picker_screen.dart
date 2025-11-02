@@ -5,8 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:laour_etf/auth/auth_wrapper.dart';
 import 'package:laour_etf/auth/secure_storage_service.dart';
 import 'package:laour_etf/screens/login_screen.dart';
-import 'package:laour_etf/auth/auth_service.dart'; // (★핵심 추가★)
-import 'package:provider/provider.dart'; // (★핵심 추가★)
+import 'package:laour_etf/auth/auth_service.dart';
+import 'package:provider/provider.dart';
 
 class AccountPickerScreen extends StatefulWidget {
   final List<String> savedEmails;
@@ -30,7 +30,6 @@ class _AccountPickerScreenState extends State<AccountPickerScreen> {
       if (password == null) throw Exception("저장된 비밀번호를 찾을 수 없습니다.");
       await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: password);
     } catch (e) {
-      // SecurityException이 여기서 터져도 잡도록 수정
       if (mounted) {
         setState(() => _isLoggingIn = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -98,10 +97,10 @@ class _AccountPickerScreenState extends State<AccountPickerScreen> {
                       title: Text(email),
                       leading: const Icon(Icons.account_circle),
                       onTap: () => _loginWithSavedAccount(email),
-                      // (삭제 버튼 비활성화)
+                      // (삭제 버튼 비활성화 - 이전 단계에서 완료)
                       trailing: IconButton(
                         icon: const Icon(Icons.delete_outline, color: Colors.grey),
-                        onPressed: null, // ★★★ 비활성화 ★★★
+                        onPressed: null,
                       ),
                     ),
                   );
@@ -111,18 +110,9 @@ class _AccountPickerScreenState extends State<AccountPickerScreen> {
             if (_isLoggingIn) const Center(child: CircularProgressIndicator()),
             const SizedBox(height: 20),
             
-            // (★핵심 수정★) "다른 계정으로 로그인" 버튼
+            // (★핵심 수정★) "다른 계정으로 로그인" 버튼 비활성화
             OutlinedButton(
-              onPressed: () {
-                // "빙글빙글" 버그를 막기 위해
-                // LoginScreen으로 가기 '전'에 AuthService의 꼬인 상태를 초기화합니다.
-                context.read<AuthService>().clearState();
-                
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => const LoginScreen()),
-                );
-              },
+              onPressed: null, // ★★★ 헷갈림 방지를 위해 비활성화 ★★★
               child: const Text('다른 계정으로 로그인'),
             ),
           ],
