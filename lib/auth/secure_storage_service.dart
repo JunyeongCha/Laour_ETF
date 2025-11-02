@@ -1,5 +1,3 @@
-// lib/auth/secure_storage_service.dart
-
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:convert';
 
@@ -37,7 +35,7 @@ class SecureStorageService {
     return accounts.keys.toList();
   }
 
-  // (★핵심★) 삭제 함수
+  // 삭제 함수
   Future<void> deleteAccount(String email) async {
     final Map<String, String> accounts = await _readAllAccounts();
     accounts.remove(email); // 맵에서 해당 이메일 제거

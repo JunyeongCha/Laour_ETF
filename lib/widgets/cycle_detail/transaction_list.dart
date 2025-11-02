@@ -1,17 +1,12 @@
-// lib/widgets/cycle_detail/transaction_list.dart
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 class TransactionList extends StatelessWidget {
-  // (★핵심★)
-  // 메인 문서 스트림이 아니라, '하위 컬렉션'인 transactions의 스트림을 받습니다.
   final Stream<QuerySnapshot> transactionStream;
   
-  // (★핵심★)
-  // 삭제 버튼을 눌렀을 때, 4-5의 '핵심 계산' 로직을 재실행할 함수를 받습니다.
-  final Function(String transactionId) onDelete;
+  // (★요청 1★) 삭제 시 음수 방지 검사를 위해 더 많은 정보를 콜백
+  final Function(String transactionId, String type, int quantity) onDelete;
 
   const TransactionList({
     super.key, 
@@ -43,7 +38,7 @@ class TransactionList extends StatelessWidget {
 
             final DateTime date = (data['date'] as Timestamp).toDate();
             final String type = data['type'] == 'buy' ? '매수' : '매도';
-            final Color typeColor = data['type'] == 'buy' ? Colors.red : Colors.blue;
+            final Color typeColor = data['type'] == 'buy' ? Colors.red.shade700 : Colors.blue.shade700;
             final double price = (data['price'] as num).toDouble();
             final int quantity = (data['quantity'] as num).toInt();
 
@@ -58,9 +53,7 @@ class TransactionList extends StatelessWidget {
                 trailing: IconButton(
                   icon: const Icon(Icons.close),
                   color: Colors.grey,
-                  // (★핵심★) 규칙 6: 삭제 버튼 
                   onPressed: () async {
-                    // (규칙 6) 삭제 확인 팝업
                     final bool confirmDelete = await showDialog(
                       context: context,
                       builder: (context) => AlertDialog(
@@ -74,8 +67,8 @@ class TransactionList extends StatelessWidget {
                     ) ?? false;
 
                     if (confirmDelete) {
-                      // 4-5의 _onTradeDeleted 함수를 호출
-                      onDelete(doc.id); 
+                      // (★요청 1★) type과 quantity를 함께 전달
+                      onDelete(doc.id, type, quantity); 
                     }
                   },
                 ),

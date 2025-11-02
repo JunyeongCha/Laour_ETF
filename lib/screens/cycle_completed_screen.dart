@@ -1,5 +1,3 @@
-// lib/screens/cycle_completed_screen.dart
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -14,18 +12,18 @@ class CycleCompletedScreen extends StatelessWidget {
     // 1. 데이터 추출
     final String name = cycleData['name'] ?? '이름 없음';
     final int tValue = (cycleData['T_value'] as num?)?.toInt() ?? 0;
-    final double totalPurchaseAmount = (cycleData['currentPurchaseAmount'] as num?)?.toDouble() ?? 0.0;
     
-    // 2. (★핵심★) Step A에서 저장한 'totalSellAmount' 필드를 가져옴
+    final double totalPurchaseAmount = (cycleData['currentPurchaseAmount'] as num?)?.toDouble() ?? 0.0;
     final double totalSellAmount = (cycleData['totalSellAmount'] as num?)?.toDouble() ?? 0.0;
+    final double finalProfitAmount = (cycleData['realizedProfit'] as num?)?.toDouble() ?? 0.0; 
 
-    // 3. (★핵심★) [요청 2] 최종 수익/수익률 계산
-    final double finalProfitAmount = totalSellAmount - totalPurchaseAmount;
+    // 3. 최종 수익/수익률 계산
     final double finalProfitRate = (totalPurchaseAmount == 0)
         ? 0.0
         : (finalProfitAmount / totalPurchaseAmount) * 100;
         
-    final Color profitColor = finalProfitAmount >= 0 ? Colors.green.shade700 : Colors.red;
+    // (★요청 2★) 색상 수정: 수익(0 이상)=빨강, 손해=파랑
+    final Color profitColor = finalProfitAmount >= 0 ? Colors.red : Colors.blue.shade700;
 
     return Scaffold(
       appBar: AppBar(
@@ -56,12 +54,12 @@ class CycleCompletedScreen extends StatelessWidget {
                   '${totalSellAmount.toStringAsFixed(0)} 원'
                 ),
                 _buildResultRow(
-                  '완료 T-Value:', 
+                  '종료 분할수:', // (★요청 3★)
                   '$tValue'
                 ),
                 const Divider(height: 32),
                 _buildResultRow(
-                  '최종 수익 금액:',
+                  '최종 실현 수익:', 
                   '${finalProfitAmount.toStringAsFixed(0)} 원',
                   valueColor: profitColor,
                 ),

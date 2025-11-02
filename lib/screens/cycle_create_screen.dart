@@ -1,5 +1,3 @@
-// lib/screens/cycle_create_screen.dart
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -18,7 +16,8 @@ class _CycleCreateScreenState extends State<CycleCreateScreen> {
   final _totalSeedController = TextEditingController();
   final _splitCountController = TextEditingController();
   final _targetProfitRateController = TextEditingController();
-  final _currentPriceController = TextEditingController(); // (★핵심 추가★)
+  final _currentPriceController = TextEditingController(); 
+  final _starValueController = TextEditingController(); 
 
   bool _isLoading = false;
 
@@ -37,7 +36,8 @@ class _CycleCreateScreenState extends State<CycleCreateScreen> {
       final double totalSeed = double.tryParse(_totalSeedController.text) ?? 0.0;
       final int splitCount = int.tryParse(_splitCountController.text) ?? 1;
       final double targetProfitRate = double.tryParse(_targetProfitRateController.text) ?? 0.0;
-      final double currentPrice = double.tryParse(_currentPriceController.text) ?? 0.0; // (★핵심 추가★)
+      final double currentPrice = double.tryParse(_currentPriceController.text) ?? 0.0; 
+      final double starValue = double.tryParse(_starValueController.text) ?? 0.0; 
 
       final Map<String, dynamic> cycleData = {
         'name': _nameController.text.trim(),
@@ -47,15 +47,17 @@ class _CycleCreateScreenState extends State<CycleCreateScreen> {
         'targetProfitRate': targetProfitRate,
         'createdAt': Timestamp.now(),
         
-        // (★핵심 수정★)
-        'currentPrice': currentPrice, // 생성 시점의 현재 주가 저장
+        'currentPrice': currentPrice, 
+        'starValue': starValue,       
         
         // 초기화 필드
         'currentPurchaseAmount': 0.0,
-        'totalSellAmount': 0.0, // (이전 단계에서 추가함)
+        'totalSellAmount': 0.0,
         'currentQuantity': 0,
         'avgPrice': 0.0,
         'T_value': 0,
+        'realizedProfit': 0.0, 
+        'isManuallyCompleted': false, // (★요청 4★) 수동 정산 완료 플래그
       };
 
       await FirebaseFirestore.instance
@@ -88,7 +90,8 @@ class _CycleCreateScreenState extends State<CycleCreateScreen> {
     _totalSeedController.dispose();
     _splitCountController.dispose();
     _targetProfitRateController.dispose();
-    _currentPriceController.dispose(); // (★핵심 추가★)
+    _currentPriceController.dispose(); 
+    _starValueController.dispose(); 
     super.dispose();
   }
 
@@ -121,7 +124,6 @@ class _CycleCreateScreenState extends State<CycleCreateScreen> {
               ),
               const SizedBox(height: 16),
               
-              // (★핵심 추가★) 현재 주가 입력 필드
               TextFormField(
                 controller: _currentPriceController,
                 decoration: const InputDecoration(labelText: '현재 주가 (원) (필수)'),
@@ -136,6 +138,20 @@ class _CycleCreateScreenState extends State<CycleCreateScreen> {
               ),
               const SizedBox(height: 16),
               
+              TextFormField(
+                controller: _starValueController,
+                decoration: const InputDecoration(labelText: '초기 Star 값 (%) (필수)'),
+                keyboardType: TextInputType.number,
+                validator: (value) {
+                  if (value == null || value.isEmpty) return 'Star 값을 입력하세요.';
+                  if (double.tryParse(value) == null) {
+                    return '유효한 숫자를 입력하세요. (마이너스 가능)';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+
               TextFormField(
                 controller: _totalSeedController,
                 decoration: const InputDecoration(labelText: '총 시드 (원)'),

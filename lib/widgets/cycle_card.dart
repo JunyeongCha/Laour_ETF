@@ -1,8 +1,6 @@
-// lib/widgets/cycle_card.dart
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:laour_etf/screens/cycle_completed_screen.dart'; // (★핵심 추가★)
+import 'package:laour_etf/screens/cycle_completed_screen.dart';
 import 'package:laour_etf/screens/cycle_detail_screen.dart';
 
 class CycleCard extends StatelessWidget {
@@ -10,8 +8,8 @@ class CycleCard extends StatelessWidget {
 
   const CycleCard({super.key, required this.cycleDoc});
 
+  // 삭제 로직
   Future<void> _deleteCycle(BuildContext context) async {
-    // ... (이전과 동일) ...
     final bool confirmDelete = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -46,23 +44,28 @@ class CycleCard extends StatelessWidget {
     final String nickname = data['nickname'] ?? '';
     final double avgPrice = (data['avgPrice'] as num?)?.toDouble() ?? 0.0;
     final int quantity = (data['currentQuantity'] as num?)?.toInt() ?? 0;
-    final double purchaseAmount = (data['currentPurchaseAmount'] as num?)?.toDouble() ?? 0.0;
+    final double purchaseAmount = (data['currentPurchaseAmount'] as num?)?.toDouble() ?? 0.0; // "총 매수 금액"
     final double totalSeed = (data['totalSeed'] as num?)?.toDouble() ?? 1.0;
     
-    // (★핵심★) Step A에서 저장한 'totalSellAmount' 필드를 가져옴
-    final double totalSellAmount = (data['totalSellAmount'] as num?)?.toDouble() ?? 0.0;
+    final double realizedProfit = (data['realizedProfit'] as num?)?.toDouble() ?? 0.0;
+    final double currentPrice = (data['currentPrice'] as num?)?.toDouble() ?? 0.0;
     
     final double seedUsagePercent = (totalSeed == 0) ? 0 : (purchaseAmount / totalSeed) * 100;
-    final bool isCompleted = (quantity == 0 && purchaseAmount > 0); // "규칙 1"
+    
+    // (★요청 4★) 수동 완료 플래그
+    final bool isManuallyCompleted = (data['isManuallyCompleted'] as bool?) ?? false;
+    final bool isCompleted = isManuallyCompleted || (quantity == 0 && purchaseAmount > 0); 
 
-    // (★핵심★) [요청 3] 정산 완료 시 수익/수익률 계산
+    // (★수정★) 정산 완료 시 수익/수익률 계산
     double finalProfitAmount = 0.0;
     double finalProfitRate = 0.0;
+    
     if (isCompleted) {
-      finalProfitAmount = totalSellAmount - purchaseAmount;
+      finalProfitAmount = realizedProfit; 
       finalProfitRate = (purchaseAmount == 0) ? 0.0 : (finalProfitAmount / purchaseAmount) * 100;
     }
-    final Color profitColor = finalProfitAmount >= 0 ? Colors.green.shade700 : Colors.red;
+    // (★요청 2★) 색상 변경: 수익=빨강, 손해=파랑
+    final Color finalProfitColor = finalProfitAmount >= 0 ? Colors.red : Colors.blue.shade700;
 
 
     return Card(
@@ -71,8 +74,8 @@ class CycleCard extends StatelessWidget {
       child: Dismissible(
         key: Key(cycleDoc.id),
         direction: DismissDirection.endToStart,
+        // 스와이프 시 팝업 로직
         confirmDismiss: (direction) async {
-          // (스와이프 시 팝업 로직 - 이전과 동일)
           final bool confirm = await showDialog(
             context: context,
             builder: (context) => AlertDialog(
@@ -107,7 +110,6 @@ class CycleCard extends StatelessWidget {
           child: const Icon(Icons.delete, color: Colors.white),
         ),
         child: InkWell(
-          // (★핵심 수정★) [요청 2]
           onTap: () {
             if (isCompleted) {
               // 1. 정산 완료 시 -> "정산 완료 페이지"로 이동
@@ -140,7 +142,6 @@ class CycleCard extends StatelessWidget {
                   Text(nickname, style: TextStyle(color: Colors.grey.shade600)),
                 const SizedBox(height: 12),
                 
-                // (★핵심 수정★) [요청 3]
                 if (isCompleted)
                   // "정산 완료" 시 UI
                   Column(
@@ -148,28 +149,61 @@ class CycleCard extends StatelessWidget {
                     children: [
                       Text(
                         '정산 완료',
-                        style: TextStyle(fontSize: 16, color: profitColor, fontWeight: FontWeight.bold),
+                        style: TextStyle(fontSize: 16, color: finalProfitColor, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
                       _buildInfoRow(
-                        '최종 수익:', 
+                        '총 매수 금액:', 
+                        '${purchaseAmount.toStringAsFixed(0)} 원',
+                      ),
+                      _buildInfoRow(
+                        '최종 실현 수익:',
                         '${finalProfitAmount.toStringAsFixed(0)} 원', 
-                        valueColor: profitColor
+                        valueColor: finalProfitColor
                       ),
                       _buildInfoRow(
                         '최종 수익률:', 
                         '${finalProfitRate.toStringAsFixed(2)} %', 
-                        valueColor: profitColor
+                        valueColor: finalProfitColor
                       ),
                     ],
                   )
                 else
-                  // "진행 중" 시 UI (이전과 동일)
+                  // "진행 중" 시 UI
                   Column(
                     children: [
-                      _buildInfoRow('평단가:', '${avgPrice.toStringAsFixed(0)} 원'),
-                      _buildInfoRow('보유 수량:', '$quantity 주'),
-                      _buildInfoRow('매입 금액:', '${purchaseAmount.toStringAsFixed(0)} 원'),
+                      Builder( 
+                        builder: (context) {
+                          double currentProfitLoss = 0.0;
+                          double currentProfitRate = 0.0;
+                          
+                          // (★요청 2★) 색상 변경: 수익=빨강, 손해=파랑
+                          Color currentProfitColor = Colors.grey;
+                          
+                          if (avgPrice > 0 && currentPrice > 0 && quantity > 0) {
+                            currentProfitLoss = (currentPrice - avgPrice) * quantity;
+                            currentProfitRate = ((currentPrice / avgPrice) - 1) * 100;
+                            currentProfitColor = currentProfitLoss >= 0 ? Colors.red : Colors.blue.shade700;
+                          }
+
+                          return Column(
+                            children: [
+                              _buildInfoRow('평단가:', '${avgPrice.toStringAsFixed(0)} 원'),
+                              _buildInfoRow('보유 수량:', '$quantity 주'),
+                              _buildInfoRow(
+                                '현재 평가손익:', 
+                                '${currentProfitLoss.toStringAsFixed(0)} 원',
+                                valueColor: currentProfitColor,
+                              ),
+                              _buildInfoRow(
+                                '현재 수익률:', 
+                                '${currentProfitRate.toStringAsFixed(2)} %',
+                                valueColor: currentProfitColor,
+                              ),
+                            ],
+                          );
+                        },
+                      ),
                       const SizedBox(height: 8),
                       LinearProgressIndicator(
                         value: seedUsagePercent / 100,
@@ -185,6 +219,7 @@ class CycleCard extends StatelessWidget {
     );
   }
 
+  // UI 헬퍼
   Widget _buildInfoRow(String title, String value, {Color? valueColor}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,

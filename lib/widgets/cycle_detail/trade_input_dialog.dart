@@ -1,5 +1,3 @@
-// lib/widgets/cycle_detail/trade_input_dialog.dart
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart'; // 날짜 포맷을 위해 pubspec.yaml에 'intl' 추가 필요
 

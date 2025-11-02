@@ -1,5 +1,3 @@
-// lib/auth/auth_service.dart
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -26,7 +24,7 @@ class AuthService with ChangeNotifier {
     notifyListeners();
   }
 
-  // (★핵심 추가★) "다른 계정으로 로그인" 버그 해결용
+  // "다른 계정으로 로그인" 버그 해결용
   // 꼬여버린 로딩/에러 상태를 강제로 초기화합니다.
   void clearState() {
     _isLoading = false;
@@ -34,7 +32,7 @@ class AuthService with ChangeNotifier {
     notifyListeners();
   }
 
-  // (수정 없음) 로그인 로직
+  // 로그인 로직
   Future<bool> signIn(String email, String password) async {
     _setLoading(true);
     _setError('');
@@ -51,7 +49,7 @@ class AuthService with ChangeNotifier {
     }
   }
 
-  // (수정 없음) 회원가입 로직
+  // 회원가입 로직
   Future<bool> signUp(BuildContext context, String name, String email, String password) async {
     _setLoading(true);
     _setError('');
@@ -84,7 +82,7 @@ class AuthService with ChangeNotifier {
     }
   }
 
-  // (수정 없음) 로그아웃
+  // 로그아웃
   Future<void> signOut() async {
     await _auth.signOut();
   }

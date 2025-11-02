@@ -1,11 +1,9 @@
-// lib/main.dart
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:laour_etf/auth/auth_service.dart';
 import 'package:laour_etf/auth/auth_wrapper.dart';
-import 'package:provider/provider.dart'; // (★추가★)
+import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -14,13 +12,10 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   
-  // (★수정★) 템플릿처럼 MultiProvider로 앱을 감쌉니다.
   runApp(
     MultiProvider(
       providers: [
-        // 1. AuthService 등록
         ChangeNotifierProvider(create: (context) => AuthService()),
-        // 2. 템플릿처럼 유저 스트림 등록
         StreamProvider<User?>(
           create: (context) => FirebaseAuth.instance.authStateChanges(),
           initialData: null,
@@ -42,7 +37,6 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      // 3. AuthWrapper (AuthGate)
       home: const AuthWrapper(),
     );
   }
