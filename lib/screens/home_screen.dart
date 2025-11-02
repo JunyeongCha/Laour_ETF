@@ -7,6 +7,7 @@ import 'package:laour_etf/widgets/completed_status_card.dart';
 import 'package:laour_etf/widgets/cycle_list_view.dart';
 import 'package:laour_etf/widgets/ongoing_status_card.dart'; 
 import 'package:provider/provider.dart';
+import 'package:laour_etf/screens/my_page_screen.dart'; // (★ 5-1 신규 ★)
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -71,8 +72,20 @@ class _HomeScreenState extends State<HomeScreen> {
             ? '포트폴리오'
             : '$_userName님의 포트폴리오'),
         actions: [
+          // (★ 5-1 신규 ★) 마이페이지 버튼
+          IconButton(
+            icon: const Icon(Icons.person_outline),
+            tooltip: '마이페이지',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const MyPageScreen()),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
+            tooltip: '로그아웃',
             onPressed: () => context.read<AuthService>().signOut(),
           ),
         ],
@@ -105,11 +118,8 @@ class _HomeScreenState extends State<HomeScreen> {
             final data = doc.data() as Map<String, dynamic>?;
             final int quantity = (data?['currentQuantity'] as num?)?.toInt() ?? 0;
             final double purchaseAmount = (data?['currentPurchaseAmount'] as num?)?.toDouble() ?? 0.0;
-            
-            // (★요청 4★) 수동 완료 플래그
             final bool isManuallyCompleted = (data?['isManuallyCompleted'] as bool?) ?? false;
 
-            // (★요청 4★) 수동으로 완료했거나 || (수량이 0이고 매수이력이 있으면)
             if (isManuallyCompleted || (quantity == 0 && purchaseAmount > 0)) {
               completedCycles.add(doc);
             } else {
