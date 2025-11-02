@@ -1,3 +1,5 @@
+//lib/auth/auth_wrapper.dart
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:laour_etf/auth/secure_storage_service.dart';

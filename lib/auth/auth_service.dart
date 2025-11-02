@@ -24,7 +24,6 @@ class AuthService with ChangeNotifier {
     notifyListeners();
   }
 
-  // "다른 계정으로 로그인" 버그 해결용
   // 꼬여버린 로딩/에러 상태를 강제로 초기화합니다.
   void clearState() {
     _isLoading = false;
@@ -32,57 +31,60 @@ class AuthService with ChangeNotifier {
     notifyListeners();
   }
 
-  // 로그인 로직
+  // (★핵심 수정★) 
+  // 로그인 성공 시에도 _setLoading(false)를 호출하도록 수정
   Future<bool> signIn(String email, String password) async {
     _setLoading(true);
     _setError('');
 
     try {
       await _auth.signInWithEmailAndPassword(email: email, password: password);
-      // 로그인 성공 시 _setLoading(false) 호출 안 함
+      
+      // (★핵심 버그 수정★)
+      // 로그인 성공 시 로딩 상태를 'false'로 되돌립니다.
+      // 이것이 없으면 isLoading이 true로 고정되어 무한루프(Stuck) 발생
+      _setLoading(false); 
       return true;
+      
     } on FirebaseAuthException catch (e) {
-      // 로그인 실패 시에만 _setLoading(false) 호출
       _setError('로그인 실패: ${e.message}');
       _setLoading(false);
       return false;
     }
   }
 
-  // 회원가입 로직
+  // 회원가입 로직 (이전 단계에서 수정 완료됨)
   Future<bool> signUp(BuildContext context, String name, String email, String password) async {
     _setLoading(true);
     _setError('');
 
     try {
-      // 1. Auth 가입
       UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
-      // 2. Firestore 저장
       await _firestore.collection('users').doc(userCredential.user!.uid).set({
         'name': name,
         'email': email,
         'uid': userCredential.user!.uid,
       });
 
-      // 3. '무조건 저장'
+      // 회원가입 시에는 "무조건 저장"
       await _storageService.saveAccount(email, password);
       
-      // 회원가입 성공 시 _setLoading(false) 호출 안 함
+      // 회원가입 성공 시 로딩 상태 'false'로 변경
+      _setLoading(false);
       return true;
 
     } on FirebaseAuthException catch (e) {
-      // 회원가입 실패 시에만 _setLoading(false) 호출
       _setError('회원가입 실패: ${e.message}');
       _setLoading(false);
       return false;
     }
   }
 
-  // 로그아웃
+  // 로그아웃 (변경 없음)
   Future<void> signOut() async {
     await _auth.signOut();
   }
