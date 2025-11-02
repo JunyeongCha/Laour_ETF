@@ -1,8 +1,11 @@
+// // lib/screens/my_page_screen.dart (수정)
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:laour_etf/auth/auth_service.dart'; 
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // (★신규★)
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:laour_etf/providers/theme_provider.dart'; // (★신규★)
 
 class MyPageScreen extends StatelessWidget {
   const MyPageScreen({super.key});
@@ -10,14 +13,16 @@ class MyPageScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final User? user = context.watch<User?>();
+    
+    // (★신규★) 5-3 ThemeProvider 가져오기
+    final themeProvider = context.watch<ThemeProvider>();
 
-    // (★신규★) 5-2 로직: 누적 총 수익 계산 스트림
     final Stream<QuerySnapshot>? completedCyclesStream = (user != null)
       ? FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .collection('cycles')
-          .snapshots() // 모든 사이클을 가져옴
+          .snapshots() 
       : null;
 
     return Scaffold(
@@ -27,7 +32,7 @@ class MyPageScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16.0),
         children: [
-          // --- 1. 내 정보 섹션 (5-2 단계에서 구현) ---
+          // --- 1. 내 정보 섹션 ---
           const Text(
             '내 정보',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -45,7 +50,6 @@ class MyPageScreen extends StatelessWidget {
                   ),
                 ),
                 
-                // (★수정★) 5-2 누적 총 수익 StreamBuilder
                 StreamBuilder<QuerySnapshot>(
                   stream: completedCyclesStream,
                   builder: (context, snapshot) {
@@ -59,7 +63,6 @@ class MyPageScreen extends StatelessWidget {
 
                     double totalRealizedProfit = 0.0;
                     
-                    // (★신규★) 홈 화면과 동일한 필터링 로직
                     for (var doc in snapshot.data!.docs) {
                       final data = doc.data() as Map<String, dynamic>?;
                       if (data == null) continue;
@@ -68,13 +71,11 @@ class MyPageScreen extends StatelessWidget {
                       final double purchaseAmount = (data['currentPurchaseAmount'] as num?)?.toDouble() ?? 0.0;
                       final bool isManuallyCompleted = (data['isManuallyCompleted'] as bool?) ?? false;
 
-                      // (★신규★) 정산 완료된 사이클만 필터링
                       if (isManuallyCompleted || (quantity == 0 && purchaseAmount > 0)) {
                         totalRealizedProfit += (data['realizedProfit'] as num?)?.toDouble() ?? 0.0;
                       }
                     }
                     
-                    // (★신규★) 수익/손해 색상 (빨강/파랑)
                     final Color profitColor = totalRealizedProfit >= 0 ? Colors.red : Colors.blue.shade700;
 
                     return ListTile(
@@ -96,7 +97,7 @@ class MyPageScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          // --- 2. 환경 설정 섹션 (5-3, 5-4, 5-5 단계) ---
+          // --- 2. 환경 설정 섹션 ---
           const Text(
             '환경 설정',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -106,13 +107,14 @@ class MyPageScreen extends StatelessWidget {
             elevation: 2.0,
             child: Column(
               children: [
-                // (5-3 단계) 다크 모드
+                // (★수정★) 5-3 다크 모드
                 SwitchListTile(
                   secondary: const Icon(Icons.dark_mode_outlined),
                   title: const Text('다크 모드'),
-                  value: false, // (5-3 단계에서 ThemeProvider와 연결)
+                  value: themeProvider.isDarkMode, // (★수정★)
                   onChanged: (bool value) {
-                    // (5-3 단계에서 구현)
+                    // (★수정★)
+                    context.read<ThemeProvider>().toggleTheme(value);
                   },
                 ),
                 // (5-4 단계) 비밀번호 변경
