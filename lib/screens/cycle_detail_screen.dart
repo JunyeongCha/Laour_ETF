@@ -26,7 +26,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
   final _starValueController = TextEditingController();
   
   bool _isRecalculating = false; // 재계산 중 로딩 스피너
-  double _savedPrice = 0.0; // (★요청 3★) 물타기 비교용
+  double _savedPrice = 0.0; // 물타기 비교용
 
   @override
   void initState() {
@@ -55,7 +55,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
         final double price = (data['currentPrice'] as num?)?.toDouble() ?? 0.0;
         _currentPriceController.text = price.toString();
         _starValueController.text = (data['starValue'] as num?)?.toString() ?? '0.0';
-        _savedPrice = price; // (★요청 3★) 저장된 가격 보관
+        _savedPrice = price; 
       }
     });
   }
@@ -118,10 +118,10 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
       final int currentQuantity = totalBuyQuantity - totalSellQuantity;
       final int tValue = uniqueDates.length; 
 
-      // (★요청 1★) 만약 계산 결과가 음수면, 로직을 중단 (데이터 꼬임 방지)
-      // (이 코드는 _onDeleteTrade의 pre-check가 실패했을 때의 최후의 방어선입니다)
+      // (★버그 1★)
+      // 여기서 Exception을 발생시켜야 _onDeleteTrade의 catch 블록이 작동합니다.
       if (currentQuantity < 0) {
-        throw Exception("계산 결과 보유 수량이 음수입니다. 데이터를 확인하세요.");
+        throw Exception("계산 결과 보유 수량이 음수입니다.");
       }
 
       await _cycleRef.update({
@@ -139,6 +139,10 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
             SnackBar(content: Text('재계산 실패: ${e.toString()}'))
          );
        }
+       // (★버그 1★)
+       // 계산이 실패하면(음수 오류 포함) Exception을 다시 던져서
+       // _onDeleteTrade가 catch할 수 있도록 합니다.
+       rethrow; 
     } finally {
       if (mounted) {
         setState(() { _isRecalculating = false; });
@@ -146,12 +150,14 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
     }
   }
 
-  // "간편 입력" 버튼 로직 (★요청 1★: 현재가 자동 반영)
-  void _onAddNewTrade(int currentQuantity) async {
+  // "간편 입력" 버튼 로직
+  void _onAddNewTrade() async {
+    final DocumentSnapshot currentDoc = await _cycleRef.get();
+    final int currentQuantity = (currentDoc.data() as Map<String, dynamic>)['currentQuantity'] ?? 0;
+
     final Map<String, dynamic>? newTrade = await TradeInputDialog.show(context);
 
     if (newTrade != null) {
-      // (★요청 1★) 음수 보유량 방지
       if (newTrade['type'] == 'sell' && (newTrade['quantity'] as int) > currentQuantity) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -172,7 +178,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
       
       if (mounted) {
         _currentPriceController.text = newPrice.toString();
-        _savedPrice = newPrice; // (★요청 3★) 물타기 기준 가격도 업데이트
+        _savedPrice = newPrice; 
       }
       
       await _cycleRef.update({'currentPrice': newPrice});
@@ -181,22 +187,62 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
     }
   }
 
-  // "X" 삭제 버튼 로직 (★요청 1★: 버그 수정)
-  void _onDeleteTrade(String transactionId, String type, int quantity, int currentQuantity) async {
+  // "X" 삭제 버튼 로직 (★버그 1★: 요청사항 반영)
+  void _onDeleteTrade(String transactionId, String type, int quantity, DateTime date, double price) async {
     
-    // (★요청 1★) 매수 기록 삭제 시 음수 보유량 방지 (수정된 로직)
-    // "현재 수량"이 "삭제할 매수 수량"보다 적으면, 삭제 후 음수가 됨
+    // (★버그 1★)
+    // "사전 검사"는 유지하되, 이 로직은 혹시 모를 stale data로 인해 실패할 수 있습니다.
+    final DocumentSnapshot currentDoc = await _cycleRef.get();
+    final int currentQuantity = (currentDoc.data() as Map<String, dynamic>)['currentQuantity'] ?? 0;
+    
     if (type == 'buy' && currentQuantity < quantity) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('매수 내역 삭제 시 보유주식수가 음수가 됩니다. (먼저 매도 내역을 삭제하세요)')),
         );
       }
-      return; // 삭제 중단
+      return; 
     }
     
-    await _transactionsRef.doc(transactionId).delete();
-    await _recalculateAggregates(); // 재계산
+    // (★버그 1★) "사후 검증" (Try-Catch-Undo 로직)
+    try {
+      // 1. 일단 삭제
+      await _transactionsRef.doc(transactionId).delete();
+      
+      // 2. 재계산 (이 함수가 currentQuantity < 0 이면 Exception을 throw함)
+      await _recalculateAggregates();
+
+    } catch (e) {
+      // 3. 재계산이 "음수" 오류를 뱉어낸 경우
+      if (e.toString().contains("보유 수량이 음수")) {
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('오류: 보유 수량이 음수가 됩니다. 삭제를 취소합니다.')),
+          );
+        }
+        
+        // 4. (★요청★) "그대로" 다시 입력 (삭제 취소)
+        // ID를 그대로 사용하여 문서를 복원
+        await _transactionsRef.doc(transactionId).set({ 
+            'date': Timestamp.fromDate(date),
+            'price': price,
+            'quantity': quantity,
+            'type': type,
+        });
+        
+        // 5. 복원 후 다시 재계산 (상태를 원상복구)
+        await _recalculateAggregates();
+      
+      } else {
+        // 6. 그 외 다른 오류
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('삭제/계산 중 알 수 없는 오류: ${e.toString()}'))
+          );
+        }
+      }
+    }
   }
   
   // 현재가/Star 값 Firestore에 저장
@@ -211,7 +257,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
         });
         
         if (mounted) {
-          _savedPrice = price; // (★요청 3★) 저장 시 물타기 기준 가격 업데이트
+          _savedPrice = price; 
           FocusManager.instance.primaryFocus?.unfocus(); 
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -235,7 +281,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('수동 정산 완료'),
-            content: const Text('분할 매수가 완료되었습니다. 이 사이클을 "정산 완료"로 처리하시겠습니까? (손익과 관계없이 완료 처리됩니다.)'),
+            content: const Text('이 사이클을 "정산 완료"로 처리하시겠습니까?'),
             actions: [
               TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('취소')),
               TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('완료')),
@@ -340,6 +386,15 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
             showBuyTheDip = true;
           }
         }
+        
+        // (★버그 2★) "목표 수익률 달성" 로직 (검토 완료: 정상)
+        bool showTargetReached = false;
+        if (targetProfitRate > 0 && currentProfitRate >= targetProfitRate) {
+          showTargetReached = true;
+        }
+        
+        // (★요청 4★) "분할 종료" 로직
+        bool showSplitFinished = (tValue >= splitCount && !isManuallyCompleted && currentQuantity > 0);
 
         return Scaffold(
           appBar: AppBar(
@@ -392,7 +447,33 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                     ),
                   ),
                 
-                // (★요청 3★) T-Value -> "진행 분할수"
+                // (★요청 2★) "목표 수익률 달성" 텍스트
+                if (showTargetReached && !showSplitFinished)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: Column(
+                      children: [
+                        Text(
+                          '목표 수익률 달성! 마무리 하셔도 됩니다',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.red, // 붉은색
+                          ),
+                        ),
+                        Text(
+                          '혹시 모르니 현재주가를 확인해주세요',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.blue.shade700, // 파란색
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                 _buildInfoCard("사이클 현황 (진행 $tValue / $splitCount 분할)", [
                   _buildInfoRow(
                     '평단가:', 
@@ -409,7 +490,6 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                   _buildInfoRow('1회 투자금:', '${oneTimeInvestment.toStringAsFixed(0)} 원'),
                 ]),
                 
-                // (E. 매수 지침)
                 _buildInfoCard("🔴 매수 지침 (Star = $starValue%)", [
                   _buildDirectiveRow(
                     isFirstBuy ? 'LOC 현재가:' : 'LOC 평단:',
@@ -431,7 +511,6 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                   _buildDirectiveRow('LOC:', '${(displayAvgPrice * 0.792).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700),
                 ]),
 
-                // (F. 매도 지침)
                 _buildInfoCard("🔵 매도 지침 (목표 = $targetProfitRate%)", [
                   _buildDirectiveRow( 
                     'LOC ${starValue}%:',
@@ -446,7 +525,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                 ]),
                 
                 ElevatedButton(
-                  onPressed: () => _onAddNewTrade(currentQuantity),
+                  onPressed: _onAddNewTrade,
                   child: const Text('간편 입력 (거래 추가)'),
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size(double.infinity, 50),
@@ -457,17 +536,18 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                 const Text('거래 내역', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                 TransactionList(
                   transactionStream: _transactionStream,
-                  onDelete: (transactionId, type, quantity) => _onDeleteTrade(
+                  onDelete: (transactionId, type, quantity, date, price) => _onDeleteTrade( // (★버그 1★)
                     transactionId, 
                     type, 
-                    quantity, 
-                    currentQuantity
+                    quantity,
+                    date,     // (★신규★)
+                    price     // (★신규★)
                   ),
                 ),
 
-                // (★요청 4★) "정산완료하기" 버튼
-                // (T-Value가 분할수보다 크거나 같고, 수동 완료되지 않았으며, 수량이 0보다 클 때)
-                if (tValue >= splitCount && !isManuallyCompleted && currentQuantity > 0)
+                // (★요청 2 & 4★) "정산완료하기" 버튼
+                // (분할 종료 || 목표 수익률 달성) && (수동 완료 안 됨) && (수량 > 0)
+                if ((showSplitFinished || showTargetReached) && !isManuallyCompleted && currentQuantity > 0)
                   Padding(
                     padding: const EdgeInsets.only(top: 24.0),
                     child: OutlinedButton(
@@ -477,7 +557,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                         foregroundColor: Colors.blue.shade700,
                         side: BorderSide(color: Colors.blue.shade700),
                       ),
-                      child: const Text('정산완료하기 (분할 종료)'),
+                      child: Text(showSplitFinished ? '정산완료하기 (분할 종료)' : '정산완료하기 (목표 달성)'),
                     ),
                   ),
               ],
@@ -514,7 +594,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: TextStyle(color: Colors.grey.shade600)),
+          Text(title, style: TextStyle(color: Colors.grey.shade700)),
           Text(
             value, 
             style: TextStyle(

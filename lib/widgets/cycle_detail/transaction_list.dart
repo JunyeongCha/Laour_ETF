@@ -5,8 +5,8 @@ import 'package:intl/intl.dart';
 class TransactionList extends StatelessWidget {
   final Stream<QuerySnapshot> transactionStream;
   
-  // (★요청 1★) 삭제 시 음수 방지 검사를 위해 더 많은 정보를 콜백
-  final Function(String transactionId, String type, int quantity) onDelete;
+  // (★버그 1★) 삭제 취소(Undo) 로직을 위해 모든 거래 정보를 콜백
+  final Function(String transactionId, String type, int quantity, DateTime date, double price) onDelete;
 
   const TransactionList({
     super.key, 
@@ -67,8 +67,8 @@ class TransactionList extends StatelessWidget {
                     ) ?? false;
 
                     if (confirmDelete) {
-                      // (★요청 1★) type과 quantity를 함께 전달
-                      onDelete(doc.id, type, quantity); 
+                      // (★버그 1★) date와 price를 추가로 전달
+                      onDelete(doc.id, data['type'], quantity, date, price); 
                     }
                   },
                 ),
