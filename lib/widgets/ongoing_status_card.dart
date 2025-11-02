@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart'; // (★신규★)
+import 'package:laour_etf/providers/theme_provider.dart'; // (★신규★)
 
 class OngoingStatusCard extends StatelessWidget {
   final List<QueryDocumentSnapshot> cycleDocs;
@@ -8,6 +10,11 @@ class OngoingStatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // (★신규★) 현재 테마 모드를 가져옴
+    final themeProvider = context.watch<ThemeProvider>();
+    final bool isDarkMode = themeProvider.isDarkMode;
+
+    // --- (★복구★) 5-2의 원본 계산 로직 시작 ---
     double totalSeed = 0;
     double totalPurchaseAmount = 0;
     double totalOngoingProfit = 0.0;
@@ -37,29 +44,61 @@ class OngoingStatusCard extends StatelessWidget {
         ? 0.0 
         : (totalOngoingProfit / totalPurchaseAmount) * 100;
     
-    // (★요청 2★) 색상 변경: 수익=빨강, 손해=파랑
     final Color profitColor = totalOngoingProfit >= 0 ? Colors.red : Colors.blue.shade700;
+    // --- (★복구★) 5-2의 원본 계산 로직 끝 ---
+
+
+    // (★신규★) 다크 모드에 따른 배경 및 글씨 색상 조정
+    final Color cardBackgroundColor = isDarkMode ? Colors.grey[900]! : Colors.blue.shade50; // 원본 민트색
+    final Color textColor = isDarkMode ? Colors.white : Colors.black;
+    final Color subTextColor = isDarkMode ? Colors.white70 : Colors.grey.shade700; // 원본 회색
+    final Color borderColor = isDarkMode ? Colors.white.withOpacity(0.5) : Colors.transparent; // 테두리 색상
 
     return Card(
+      color: cardBackgroundColor, // (★수정★)
       elevation: 2.0,
-      color: Colors.blue.shade50,
+      // (★신규★) 테두리 추가
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: borderColor, width: isDarkMode ? 1.0 : 0.0),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            _buildStatusRow('진행중 시드', '${totalSeed.toStringAsFixed(0)} 원'),
-            _buildStatusRow('진행중 매입금액', '${totalPurchaseAmount.toStringAsFixed(0)} 원'),
+            // (★복구★) 5-2의 원본 UI 항목들
+            _buildStatusRow(
+              '진행중 시드', 
+              '${totalSeed.toStringAsFixed(0)} 원',
+              textColor: textColor, 
+              subTextColor: subTextColor
+            ),
+            _buildStatusRow(
+              '진행중 매입금액', 
+              '${totalPurchaseAmount.toStringAsFixed(0)} 원',
+              textColor: textColor, 
+              subTextColor: subTextColor
+            ),
             _buildStatusRow(
               '진행중 총 손익:', 
               '${totalOngoingProfit.toStringAsFixed(0)} 원',
-              valueColor: profitColor
+              valueColor: profitColor,
+              textColor: textColor, 
+              subTextColor: subTextColor
             ),
             _buildStatusRow(
               '진행중 총 손익률:', 
               '${totalOngoingProfitRate.toStringAsFixed(2)} %',
-              valueColor: profitColor
+              valueColor: profitColor,
+              textColor: textColor, 
+              subTextColor: subTextColor
             ),
-            _buildStatusRow('진행중 포트폴리오 수', '$portfolioCount 개'),
+            _buildStatusRow(
+              '진행중 포트폴리오 수', 
+              '$portfolioCount 개',
+              textColor: textColor, 
+              subTextColor: subTextColor
+            ),
             const SizedBox(height: 12),
             
             Row(
@@ -67,11 +106,11 @@ class OngoingStatusCard extends StatelessWidget {
               children: [
                 Text(
                   '진행중 시드 소진율:',
-                  style: TextStyle(color: Colors.grey.shade700),
+                  style: TextStyle(color: subTextColor), // (★수정★)
                 ),
                 Text(
                   '${seedUsagePercent.toStringAsFixed(1)} %', 
-                  style: const TextStyle(fontWeight: FontWeight.bold)
+                  style: TextStyle(fontWeight: FontWeight.bold, color: textColor) // (★수정★)
                 ),
               ],
             ),
@@ -87,19 +126,20 @@ class OngoingStatusCard extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusRow(String title, String value, {Color? valueColor}) {
+  // (★수정★) 헬퍼 함수가 다크모드 텍스트 색상을 받도록 수정
+  Widget _buildStatusRow(String title, String value, {Color? valueColor, required Color textColor, required Color subTextColor}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: TextStyle(color: Colors.grey.shade700)),
+          Text(title, style: TextStyle(color: subTextColor)), // (★수정★)
           Text(
             value, 
             style: TextStyle(
               fontWeight: FontWeight.bold, 
               fontSize: 16,
-              color: valueColor ?? Colors.black,
+              color: valueColor ?? textColor, // (★수정★)
             ),
           ),
         ],
