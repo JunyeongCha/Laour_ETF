@@ -1,16 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:laour_etf/auth/auth_service.dart'; // 로그아웃을 위해 미리 import
-import 'package:firebase_auth/firebase_auth.dart'; // (★수정★) User 타입을 알기 위해 import
+import 'package:laour_etf/auth/auth_service.dart'; 
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // (★신규★)
 
 class MyPageScreen extends StatelessWidget {
   const MyPageScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // (★수정★)
-    // StreamProvider를 통해 현재 로그인된 User 객체를 직접 받습니다.
     final User? user = context.watch<User?>();
+
+    // (★신규★) 5-2 로직: 누적 총 수익 계산 스트림
+    final Stream<QuerySnapshot>? completedCyclesStream = (user != null)
+      ? FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('cycles')
+          .snapshots() // 모든 사이클을 가져옴
+      : null;
 
     return Scaffold(
       appBar: AppBar(
@@ -33,15 +41,55 @@ class MyPageScreen extends StatelessWidget {
                   leading: const Icon(Icons.email_outlined),
                   title: const Text('계정'),
                   subtitle: Text(
-                    // (★수정★)
-                    // user 변수에서 직접 이메일을 읽습니다.
                     user?.email ?? '로그인 정보 없음',
                   ),
                 ),
-                const ListTile(
-                  leading: Icon(Icons.assessment_outlined),
-                  title: Text('누적 총 수익'),
-                  subtitle: Text('... (계산 중)'), // (5-2 단계에서 구현)
+                
+                // (★수정★) 5-2 누적 총 수익 StreamBuilder
+                StreamBuilder<QuerySnapshot>(
+                  stream: completedCyclesStream,
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData || user == null) {
+                      return const ListTile(
+                        leading: Icon(Icons.assessment_outlined),
+                        title: Text('누적 총 수익'),
+                        subtitle: Text('... (계산 중)'),
+                      );
+                    }
+
+                    double totalRealizedProfit = 0.0;
+                    
+                    // (★신규★) 홈 화면과 동일한 필터링 로직
+                    for (var doc in snapshot.data!.docs) {
+                      final data = doc.data() as Map<String, dynamic>?;
+                      if (data == null) continue;
+                      
+                      final int quantity = (data['currentQuantity'] as num?)?.toInt() ?? 0;
+                      final double purchaseAmount = (data['currentPurchaseAmount'] as num?)?.toDouble() ?? 0.0;
+                      final bool isManuallyCompleted = (data['isManuallyCompleted'] as bool?) ?? false;
+
+                      // (★신규★) 정산 완료된 사이클만 필터링
+                      if (isManuallyCompleted || (quantity == 0 && purchaseAmount > 0)) {
+                        totalRealizedProfit += (data['realizedProfit'] as num?)?.toDouble() ?? 0.0;
+                      }
+                    }
+                    
+                    // (★신규★) 수익/손해 색상 (빨강/파랑)
+                    final Color profitColor = totalRealizedProfit >= 0 ? Colors.red : Colors.blue.shade700;
+
+                    return ListTile(
+                      leading: Icon(Icons.assessment_outlined, color: profitColor),
+                      title: const Text('누적 총 수익'),
+                      subtitle: Text(
+                        '${totalRealizedProfit.toStringAsFixed(0)} 원',
+                        style: TextStyle(
+                          color: profitColor, 
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -81,9 +129,7 @@ class MyPageScreen extends StatelessWidget {
                   leading: Icon(Icons.logout, color: Colors.red.shade700),
                   title: Text('로그아웃', style: TextStyle(color: Colors.red.shade700)),
                   onTap: () {
-                    // (5-5 단계) 로그아웃 확인 팝업 후 실행
                     context.read<AuthService>().signOut();
-                    // (수정) popUntil로 홈까지 안전하게 이동
                     Navigator.of(context).popUntil((route) => route.isFirst);
                   },
                 ),
