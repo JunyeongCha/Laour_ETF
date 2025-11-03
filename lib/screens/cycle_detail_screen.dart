@@ -2,9 +2,12 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; // 'DateFormat'을 사용하기 위한 import
+import 'package:flutter/services.dart'; // (★신규★) 3번: 숫자 입력을 위해
+import 'package:intl/intl.dart'; 
 import 'package:laour_etf/widgets/cycle_detail/trade_input_dialog.dart';
 import 'package:laour_etf/widgets/cycle_detail/transaction_list.dart';
+import 'package:provider/provider.dart'; // (★신규★) 2번
+import 'package:laour_etf/providers/theme_provider.dart'; // (★신규★) 2번
 
 class CycleDetailScreen extends StatefulWidget {
   final String cycleId;
@@ -25,8 +28,12 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
   final _currentPriceController = TextEditingController();
   final _starValueController = TextEditingController();
   
-  bool _isRecalculating = false; // 재계산 중 로딩 스피너
-  double _savedPrice = 0.0; // 물타기 비교용
+  final _nameEditController = TextEditingController();
+  final _nicknameEditController = TextEditingController();
+  final _totalSeedEditController = TextEditingController(); // (★신규★) 3번
+  
+  bool _isRecalculating = false; 
+  double _savedPrice = 0.0; 
 
   @override
   void initState() {
@@ -44,16 +51,15 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
     _cycleStream = _cycleRef.snapshots();
     _transactionStream = _transactionsRef.orderBy('date', descending: true).snapshots();
 
-    // 컨트롤러 리스너는 setState만 호출
     _currentPriceController.addListener(_updateRealTimeProfit);
     _starValueController.addListener(_updateRealTimeProfit);
 
-    // 화면 첫 로드 시 1회만 컨트롤러 값을 초기화
     _cycleStream.first.then((snapshot) {
       if (mounted && snapshot.exists) {
         final data = snapshot.data() as Map<String, dynamic>;
         final double price = (data['currentPrice'] as num?)?.toDouble() ?? 0.0;
         _currentPriceController.text = price.toString();
+        // (★수정★) 4번: starValue는 3배수 값
         _starValueController.text = (data['starValue'] as num?)?.toString() ?? '0.0';
         _savedPrice = price; 
       }
@@ -118,8 +124,6 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
       final int currentQuantity = totalBuyQuantity - totalSellQuantity;
       final int tValue = uniqueDates.length; 
 
-      // (★버그 1★)
-      // 여기서 Exception을 발생시켜야 _onDeleteTrade의 catch 블록이 작동합니다.
       if (currentQuantity < 0) {
         throw Exception("계산 결과 보유 수량이 음수입니다.");
       }
@@ -139,9 +143,6 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
             SnackBar(content: Text('재계산 실패: ${e.toString()}'))
          );
        }
-       // (★버그 1★)
-       // 계산이 실패하면(음수 오류 포함) Exception을 다시 던져서
-       // _onDeleteTrade가 catch할 수 있도록 합니다.
        rethrow; 
     } finally {
       if (mounted) {
@@ -187,11 +188,9 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
     }
   }
 
-  // "X" 삭제 버튼 로직 (★버그 1★: 요청사항 반영)
+  // "X" 삭제 버튼 로직
   void _onDeleteTrade(String transactionId, String type, int quantity, DateTime date, double price) async {
     
-    // (★버그 1★)
-    // "사전 검사"는 유지하되, 이 로직은 혹시 모를 stale data로 인해 실패할 수 있습니다.
     final DocumentSnapshot currentDoc = await _cycleRef.get();
     final int currentQuantity = (currentDoc.data() as Map<String, dynamic>)['currentQuantity'] ?? 0;
     
@@ -204,26 +203,18 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
       return; 
     }
     
-    // (★버그 1★) "사후 검증" (Try-Catch-Undo 로직)
     try {
-      // 1. 일단 삭제
       await _transactionsRef.doc(transactionId).delete();
-      
-      // 2. 재계산 (이 함수가 currentQuantity < 0 이면 Exception을 throw함)
       await _recalculateAggregates();
 
     } catch (e) {
-      // 3. 재계산이 "음수" 오류를 뱉어낸 경우
       if (e.toString().contains("보유 수량이 음수")) {
-        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('오류: 보유 수량이 음수가 됩니다. 삭제를 취소합니다.')),
           );
         }
         
-        // 4. (★요청★) "그대로" 다시 입력 (삭제 취소)
-        // ID를 그대로 사용하여 문서를 복원
         await _transactionsRef.doc(transactionId).set({ 
             'date': Timestamp.fromDate(date),
             'price': price,
@@ -231,11 +222,9 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
             'type': type,
         });
         
-        // 5. 복원 후 다시 재계산 (상태를 원상복구)
         await _recalculateAggregates();
       
       } else {
-        // 6. 그 외 다른 오류
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('삭제/계산 중 알 수 없는 오류: ${e.toString()}'))
@@ -253,7 +242,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
         
         await _cycleRef.update({
           'currentPrice': price,
-          'starValue': star,
+          'starValue': star, // (★수정★) 4번: 3배수 값이 저장됨
         });
         
         if (mounted) {
@@ -275,7 +264,91 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
       }
   }
 
-  // (★요청 4★) 수동 정산 완료
+  // (★수정★) 1번, 3번: 이름/닉네임/총 시드 수정 다이얼로그
+  Future<void> _showEditInfoDialog(String currentName, String currentNickname, double currentSeed) async {
+    _nameEditController.text = currentName;
+    _nicknameEditController.text = currentNickname;
+    _totalSeedEditController.text = currentSeed.toStringAsFixed(0); // (★신규★) 3번
+
+    return showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('사이클 정보 수정'),
+          content: SingleChildScrollView( // 스크롤 가능하게
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _nameEditController,
+                  decoration: const InputDecoration(labelText: '이름 (예: TIGER 나스닥100)'),
+                ),
+                TextField(
+                  controller: _nicknameEditController,
+                  decoration: const InputDecoration(labelText: '닉네임 (선택)'),
+                ),
+                // (★신규★) 3번: 총 시드 수정
+                TextField(
+                  controller: _totalSeedEditController,
+                  decoration: const InputDecoration(labelText: '총 시드 (원)'),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                ),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('취소'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            ElevatedButton(
+              child: const Text('저장'),
+              onPressed: () async {
+                final String newName = _nameEditController.text.trim();
+                final String newNickname = _nicknameEditController.text.trim();
+                final double newSeed = double.tryParse(_totalSeedEditController.text) ?? 0.0;
+
+                if (newName.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('이름은 비워둘 수 없습니다.')),
+                  );
+                  return;
+                }
+                
+                if (newSeed <= 0) {
+                   ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('총 시드는 0보다 커야 합니다.')),
+                  );
+                  return;
+                }
+
+                try {
+                  // (★신규★) 3번: totalSeed 업데이트
+                  await _cycleRef.update({
+                    'name': newName,
+                    'nickname': newNickname,
+                    'totalSeed': newSeed,
+                  });
+                  if (mounted) Navigator.of(context).pop();
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('수정 실패: ${e.toString()}'))
+                    );
+                  }
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // 수동 정산 완료
   Future<void> _markAsCompleted() async {
     final bool confirm = await showDialog(
           context: context,
@@ -310,11 +383,20 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
     _starValueController.removeListener(_updateRealTimeProfit);
     _currentPriceController.dispose();
     _starValueController.dispose();
+    _nameEditController.dispose(); 
+    _nicknameEditController.dispose(); 
+    _totalSeedEditController.dispose(); // (★신규★) 3번
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // (★신규★) 2번: 다크모드 텍스트 색상 처리를 위해
+    final themeProvider = context.watch<ThemeProvider>();
+    final bool isDarkMode = themeProvider.isDarkMode;
+    final Color textColor = isDarkMode ? Colors.white : Colors.black;
+    final Color subTextColor = isDarkMode ? Colors.white70 : Colors.grey.shade700;
+    
     return StreamBuilder<DocumentSnapshot>(
       stream: _cycleStream,
       builder: (context, snapshot) {
@@ -335,6 +417,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
         
         // (A. 기본 변수)
         final String name = data['name'] ?? '이름 없음';
+        final String nickname = data['nickname'] ?? ''; 
         final double totalSeed = (data['totalSeed'] as num?)?.toDouble() ?? 0.0;
         final int splitCount = (data['splitCount'] as num?)?.toInt() ?? 1;
         final double targetProfitRate = (data['targetProfitRate'] as num?)?.toDouble() ?? 0.0;
@@ -349,10 +432,13 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
         final bool isManuallyCompleted = (data['isManuallyCompleted'] as bool?) ?? false;
 
         // (C. 컨트롤러 실시간 값)
-        final double starValue = double.tryParse(_starValueController.text) ?? 0.0;
+        // (★수정★) 4번: 3배수 Star 값
+        final double starValue_3x = double.tryParse(_starValueController.text) ?? 0.0;
         final double currentPrice = double.tryParse(_currentPriceController.text) ?? 0.0;
         
-        // (★요청 4★) 최초 매수 로직
+        // (★신규★) 4번: 실제 계산에 사용할 2배수 Star 값
+        final double starValue = (starValue_3x * 2) / 3.0;
+
         final bool isFirstBuy = (avgPrice == 0 && currentQuantity == 0);
         final double displayAvgPrice = isFirstBuy ? currentPrice : avgPrice;
 
@@ -379,7 +465,6 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
         final double sellPrice2 = displayAvgPrice * (1 + (targetProfitRate / 100));
         final double sellQty2 = currentQuantity * 3.0 / 4.0;
         
-        // (★요청 3★) "물타기" 텍스트 로직
         bool showBuyTheDip = false;
         if (_savedPrice > 0 && currentPrice > 0 && currentQuantity > 0) {
           if (currentPrice <= (_savedPrice * 0.90)) {
@@ -387,18 +472,36 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
           }
         }
         
-        // (★버그 2★) "목표 수익률 달성" 로직 (검토 완료: 정상)
         bool showTargetReached = false;
         if (targetProfitRate > 0 && currentProfitRate >= targetProfitRate) {
           showTargetReached = true;
         }
         
-        // (★요청 4★) "분할 종료" 로직
         bool showSplitFinished = (tValue >= splitCount && !isManuallyCompleted && currentQuantity > 0);
 
         return Scaffold(
           appBar: AppBar(
-            title: Text(name),
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name),
+                if (nickname.isNotEmpty)
+                  Text(
+                    nickname,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
+                  ),
+              ],
+            ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.edit_outlined),
+                tooltip: '이름/닉네임/시드 수정', // (★수정★) 3번
+                onPressed: () {
+                  // (★수정★) 3번
+                  _showEditInfoDialog(name, nickname, totalSeed); 
+                },
+              ),
+            ],
           ),
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
@@ -413,7 +516,8 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                   ),
                   TextField(
                     controller: _starValueController,
-                    decoration: const InputDecoration(labelText: '오늘의 Star 값 입력 (%)'),
+                    // (★수정★) 4번: 라벨 변경
+                    decoration: const InputDecoration(labelText: '오늘의 3배수 Star 값 (%)'),
                     keyboardType: TextInputType.number,
                   ),
                   const SizedBox(height: 12),
@@ -428,11 +532,22 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  _buildInfoRow('현재 수익률:', '${currentProfitRate.toStringAsFixed(2)} %', valueColor: currentProfitColor),
-                  _buildInfoRow('현재 손익:', '${currentProfitLoss.toStringAsFixed(0)} 원', valueColor: currentProfitColor),
+                  _buildInfoRow(
+                    '현재 수익률:', 
+                    '${currentProfitRate.toStringAsFixed(2)} %', 
+                    valueColor: currentProfitColor,
+                    textColor: textColor, // (★수정★) 2번
+                    subTextColor: subTextColor, // (★수정★) 2번
+                  ),
+                  _buildInfoRow(
+                    '현재 손익:', 
+                    '${currentProfitLoss.toStringAsFixed(0)} 원', 
+                    valueColor: currentProfitColor,
+                    textColor: textColor, 
+                    subTextColor: subTextColor
+                  ),
                 ]),
                 
-                // (★요청 3★) "물타기" 텍스트
                 if (showBuyTheDip)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -447,7 +562,6 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                     ),
                   ),
                 
-                // (★요청 2★) "목표 수익률 달성" 텍스트
                 if (showTargetReached && !showSplitFinished)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -476,51 +590,94 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
 
                 _buildInfoCard("사이클 현황 (진행 $tValue / $splitCount 분할)", [
                   _buildInfoRow(
-                    '평단가:', 
-                    isFirstBuy ? '- (최초 매수 대기)' : '${avgPrice.toStringAsFixed(0)} 원'
+                    '총 시드:', 
+                    '${totalSeed.toStringAsFixed(0)} 원',
+                    textColor: textColor, // (★수정★) 2번
+                    subTextColor: subTextColor, // (★수정★) 2번
+                    // (★신규★) 3번: 수정 기능
+                    trailing: Icon(Icons.edit, size: 16, color: subTextColor),
+                    onTap: () => _showEditInfoDialog(name, nickname, totalSeed),
                   ),
-                  _buildInfoRow('보유 수량:', '$currentQuantity 주'),
-                  _buildInfoRow('총 매수 금액:', '${currentPurchaseAmount.toStringAsFixed(0)} 원'),
+                  _buildInfoRow(
+                    '평단가:', 
+                    isFirstBuy ? '- (최초 매수 대기)' : '${avgPrice.toStringAsFixed(0)} 원',
+                    textColor: textColor, 
+                    subTextColor: subTextColor
+                  ),
+                  _buildInfoRow(
+                    '보유 수량:', 
+                    '$currentQuantity 주',
+                    textColor: textColor, 
+                    subTextColor: subTextColor
+                  ),
+                  _buildInfoRow(
+                    '총 매수 금액:', 
+                    '${currentPurchaseAmount.toStringAsFixed(0)} 원',
+                    textColor: textColor, 
+                    subTextColor: subTextColor
+                  ),
                   _buildInfoRow(
                     '실현 손익 (Realized):', 
                     '${realizedProfit.toStringAsFixed(0)} 원',
                     valueColor: realizedProfit >= 0 ? Colors.red : Colors.blue.shade700,
+                    textColor: textColor, 
+                    subTextColor: subTextColor
                   ),
                   const Divider(height: 16),
-                  _buildInfoRow('1회 투자금:', '${oneTimeInvestment.toStringAsFixed(0)} 원'),
+                  _buildInfoRow(
+                    '1회 투자금:', 
+                    '${oneTimeInvestment.toStringAsFixed(0)} 원',
+                    textColor: textColor, 
+                    subTextColor: subTextColor
+                  ),
                 ]),
                 
-                _buildInfoCard("🔴 매수 지침 (Star = $starValue%)", [
+                // (★수정★) 4번: 3배수 Star 값으로 라벨 변경
+                _buildInfoCard("🔴 매수 지침 (3배수 Star = $starValue_3x%)", [
                   _buildDirectiveRow(
                     isFirstBuy ? 'LOC 현재가:' : 'LOC 평단:',
                     '${displayAvgPrice.toStringAsFixed(0)} 원 X ${buyQtyAtAvg.toStringAsFixed(4)} 주',
                     valueColor: Colors.red.shade700,
+                    textColor: textColor, // (★수정★) 2번
+                    subTextColor: subTextColor, // (★수정★) 2번
                   ),
                   _buildDirectiveRow(
-                    'LOC ${starValue}%:',
+                    // (★수정★) 4번: 3배수 Star 값으로 라벨 변경
+                    'LOC star:',
                     '${calcBuyPrice.toStringAsFixed(0)} 원 X ${buyQtyAtStar.toStringAsFixed(4)} 주',
                     valueColor: Colors.red.shade700,
+                    textColor: textColor, 
+                    subTextColor: subTextColor
                   ),
                   const Divider(height: 20),
-                  const Text('+@ 폭락장 대비 추가 매수 (규칙 2)', style: TextStyle(fontWeight: FontWeight.bold)),
-                  _buildDirectiveRow('LOC:', '${(displayAvgPrice * 0.971).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700),
-                  _buildDirectiveRow('LOC:', '${(displayAvgPrice * 0.929).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700),
-                  _buildDirectiveRow('LOC:', '${(displayAvgPrice * 0.890).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700),
-                  _buildDirectiveRow('LOC:', '${(displayAvgPrice * 0.854).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700),
-                  _buildDirectiveRow('LOC:', '${(displayAvgPrice * 0.822).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700),
-                  _buildDirectiveRow('LOC:', '${(displayAvgPrice * 0.792).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700),
+                  Text(
+                    '+@ 폭락장 대비 추가 매수 (규칙 2)', 
+                    style: TextStyle(fontWeight: FontWeight.bold, color: textColor) // (★수정★) 2번
+                  ),
+                  // (★수정★) 3번: 퍼센트 표시
+                  _buildDirectiveRow('LOC (평단*98.067%):', '${(displayAvgPrice * 0.98067).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
+                  _buildDirectiveRow('LOC (평단*95.267%):', '${(displayAvgPrice * 0.95267).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
+                  _buildDirectiveRow('LOC (평단*92.667%):', '${(displayAvgPrice * 0.92667).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
+                  _buildDirectiveRow('LOC (평단*90.267%):', '${(displayAvgPrice * 0.90267).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
+                  _buildDirectiveRow('LOC (평단*88.133%):', '${(displayAvgPrice * 0.88133).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
+                  _buildDirectiveRow('LOC (평단*86.133%):', '${(displayAvgPrice * 0.86133).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
                 ]),
 
                 _buildInfoCard("🔵 매도 지침 (목표 = $targetProfitRate%)", [
                   _buildDirectiveRow( 
-                    'LOC ${starValue}%:',
+                    // (★수정★) 4번: 3배수 Star 값으로 라벨 변경
+                    'LOC star:',
                     '${sellPrice1.toStringAsFixed(0)} 원 X ${sellQty1.toStringAsFixed(4)} 주',
                     valueColor: Colors.blue.shade700,
+                    textColor: textColor, // (★수정★) 2번
+                    subTextColor: subTextColor, // (★수정★) 2번
                   ),
                   _buildDirectiveRow(
                     'After $targetProfitRate%:',
                     '${sellPrice2.toStringAsFixed(0)} 원 X ${sellQty2.toStringAsFixed(4)} 주',
                     valueColor: Colors.blue.shade700,
+                    textColor: textColor, 
+                    subTextColor: subTextColor
                   ),
                 ]),
                 
@@ -533,20 +690,18 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                const Text('거래 내역', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                Text('거래 내역', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textColor)), // (★수정★) 2번
                 TransactionList(
                   transactionStream: _transactionStream,
-                  onDelete: (transactionId, type, quantity, date, price) => _onDeleteTrade( // (★버그 1★)
+                  onDelete: (transactionId, type, quantity, date, price) => _onDeleteTrade(
                     transactionId, 
                     type, 
                     quantity,
-                    date,     // (★신규★)
-                    price     // (★신규★)
+                    date,     
+                    price     
                   ),
                 ),
 
-                // (★요청 2 & 4★) "정산완료하기" 버튼
-                // (분할 종료 || 목표 수익률 달성) && (수동 완료 안 됨) && (수량 > 0)
                 if ((showSplitFinished || showTargetReached) && !isManuallyCompleted && currentQuantity > 0)
                   Padding(
                     padding: const EdgeInsets.only(top: 24.0),
@@ -578,7 +733,15 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            // (★수정★) 2번: 다크모드
+            Text(
+              title, 
+              style: TextStyle(
+                fontSize: 18, 
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).textTheme.titleLarge?.color, // 다크모드 자동 글씨 색상
+              )
+            ),
             const SizedBox(height: 12),
             ...children,
           ],
@@ -587,40 +750,49 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
     );
   }
   
-  // UI 헬퍼 위젯 2
-  Widget _buildInfoRow(String title, String value, {Color? valueColor}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(title, style: TextStyle(color: Colors.grey.shade700)),
-          Text(
-            value, 
-            style: TextStyle(
-              fontWeight: FontWeight.bold, 
-              fontSize: 16,
-              color: valueColor ?? Colors.black,
+  // (★수정★) 2번, 3번: 헬퍼 함수가 다크모드 색상 및 onTap/trailing을 받도록 수정
+  Widget _buildInfoRow(String title, String value, {Color? valueColor, required Color textColor, required Color subTextColor, Widget? trailing, VoidCallback? onTap}) {
+    return InkWell( // (★신규★) 3번: 탭 가능하도록
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(title, style: TextStyle(color: subTextColor)),
+            Row( // (★신규★) 3번: 값 + 트레일링 아이콘
+              children: [
+                Text(
+                  value, 
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold, 
+                    fontSize: 16,
+                    color: valueColor ?? textColor,
+                  ),
+                ),
+                if (trailing != null) const SizedBox(width: 8),
+                if (trailing != null) trailing,
+              ],
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  // UI 헬퍼 위젯 3 (지침용)
-  Widget _buildDirectiveRow(String title, String value, {Color? valueColor}) {
+  // (★수정★) 2번: 헬퍼 함수가 다크모드 색상을 받도록 수정
+  Widget _buildDirectiveRow(String title, String value, {Color? valueColor, required Color textColor, required Color subTextColor}) {
      return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title),
+          Text(title, style: TextStyle(color: subTextColor)), // (★수정★) 2번
           Text(
             value, 
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: valueColor ?? Colors.black,
+              color: valueColor ?? textColor, // (★수정★) 2번
             ),
           ),
         ],

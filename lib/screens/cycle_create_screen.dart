@@ -48,7 +48,7 @@ class _CycleCreateScreenState extends State<CycleCreateScreen> {
         'createdAt': Timestamp.now(),
         
         'currentPrice': currentPrice, 
-        'starValue': starValue,       
+        'starValue': starValue, // (★수정★) 4번: 이 값은 3배수 Star 값으로 저장됨
         
         // 초기화 필드
         'currentPurchaseAmount': 0.0,
@@ -57,7 +57,7 @@ class _CycleCreateScreenState extends State<CycleCreateScreen> {
         'avgPrice': 0.0,
         'T_value': 0,
         'realizedProfit': 0.0, 
-        'isManuallyCompleted': false, // (★요청 4★) 수동 정산 완료 플래그
+        'isManuallyCompleted': false,
       };
 
       await FirebaseFirestore.instance
@@ -140,7 +140,11 @@ class _CycleCreateScreenState extends State<CycleCreateScreen> {
               
               TextFormField(
                 controller: _starValueController,
-                decoration: const InputDecoration(labelText: '초기 Star 값 (%) (필수)'),
+                // (★수정★) 4번: 라벨 변경
+                decoration: const InputDecoration(
+                  labelText: '초기 3배수 Star 값 (%) (필수)',
+                  helperText: '예: TQQQ 3배수 Star 값 입력 시, 2배수 ETF 공식에 맞게 자동 변환됩니다.',
+                ),
                 keyboardType: TextInputType.number,
                 validator: (value) {
                   if (value == null || value.isEmpty) return 'Star 값을 입력하세요.';

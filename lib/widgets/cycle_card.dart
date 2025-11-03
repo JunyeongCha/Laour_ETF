@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:laour_etf/screens/cycle_completed_screen.dart';
 import 'package:laour_etf/screens/cycle_detail_screen.dart';
+import 'package:provider/provider.dart'; // (★신규★)
+import 'package:laour_etf/providers/theme_provider.dart'; // (★신규★)
 
 class CycleCard extends StatelessWidget {
   final QueryDocumentSnapshot cycleDoc;
@@ -38,6 +40,12 @@ class CycleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // (★신규★) 1번: 다크모드 텍스트 색상 처리를 위해
+    final themeProvider = context.watch<ThemeProvider>();
+    final bool isDarkMode = themeProvider.isDarkMode;
+    final Color textColor = isDarkMode ? Colors.white : Colors.black;
+    final Color subTextColor = isDarkMode ? Colors.white70 : Colors.grey.shade600;
+
     final data = cycleDoc.data() as Map<String, dynamic>;
 
     final String name = data['name'] ?? '이름 없음';
@@ -52,11 +60,9 @@ class CycleCard extends StatelessWidget {
     
     final double seedUsagePercent = (totalSeed == 0) ? 0 : (purchaseAmount / totalSeed) * 100;
     
-    // (★요청 4★) 수동 완료 플래그
     final bool isManuallyCompleted = (data['isManuallyCompleted'] as bool?) ?? false;
     final bool isCompleted = isManuallyCompleted || (quantity == 0 && purchaseAmount > 0); 
 
-    // (★수정★) 정산 완료 시 수익/수익률 계산
     double finalProfitAmount = 0.0;
     double finalProfitRate = 0.0;
     
@@ -64,7 +70,6 @@ class CycleCard extends StatelessWidget {
       finalProfitAmount = realizedProfit; 
       finalProfitRate = (purchaseAmount == 0) ? 0.0 : (finalProfitAmount / purchaseAmount) * 100;
     }
-    // (★요청 2★) 색상 변경: 수익=빨강, 손해=파랑
     final Color finalProfitColor = finalProfitAmount >= 0 ? Colors.red : Colors.blue.shade700;
 
 
@@ -74,7 +79,6 @@ class CycleCard extends StatelessWidget {
       child: Dismissible(
         key: Key(cycleDoc.id),
         direction: DismissDirection.endToStart,
-        // 스와이프 시 팝업 로직
         confirmDismiss: (direction) async {
           final bool confirm = await showDialog(
             context: context,
@@ -112,7 +116,6 @@ class CycleCard extends StatelessWidget {
         child: InkWell(
           onTap: () {
             if (isCompleted) {
-              // 1. 정산 완료 시 -> "정산 완료 페이지"로 이동
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -120,7 +123,6 @@ class CycleCard extends StatelessWidget {
                 ),
               );
             } else {
-              // 2. 진행 중일 시 -> "상세 페이지"로 이동
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -136,10 +138,17 @@ class CycleCard extends StatelessWidget {
               children: [
                 Text(
                   name,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 18, 
+                    fontWeight: FontWeight.bold,
+                    color: textColor, // (★수정★) 1번
+                  ),
                 ),
                 if (nickname.isNotEmpty)
-                  Text(nickname, style: TextStyle(color: Colors.grey.shade600)),
+                  Text(
+                    nickname, 
+                    style: TextStyle(color: subTextColor), // (★수정★) 1번
+                  ),
                 const SizedBox(height: 12),
                 
                 if (isCompleted)
@@ -155,16 +164,22 @@ class CycleCard extends StatelessWidget {
                       _buildInfoRow(
                         '총 매수 금액:', 
                         '${purchaseAmount.toStringAsFixed(0)} 원',
+                        textColor: textColor, // (★수정★) 1번
+                        subTextColor: subTextColor, // (★수정★) 1번
                       ),
                       _buildInfoRow(
                         '최종 실현 수익:',
                         '${finalProfitAmount.toStringAsFixed(0)} 원', 
-                        valueColor: finalProfitColor
+                        valueColor: finalProfitColor,
+                        textColor: textColor, 
+                        subTextColor: subTextColor
                       ),
                       _buildInfoRow(
                         '최종 수익률:', 
                         '${finalProfitRate.toStringAsFixed(2)} %', 
-                        valueColor: finalProfitColor
+                        valueColor: finalProfitColor,
+                        textColor: textColor, 
+                        subTextColor: subTextColor
                       ),
                     ],
                   )
@@ -176,8 +191,6 @@ class CycleCard extends StatelessWidget {
                         builder: (context) {
                           double currentProfitLoss = 0.0;
                           double currentProfitRate = 0.0;
-                          
-                          // (★요청 2★) 색상 변경: 수익=빨강, 손해=파랑
                           Color currentProfitColor = Colors.grey;
                           
                           if (avgPrice > 0 && currentPrice > 0 && quantity > 0) {
@@ -188,17 +201,31 @@ class CycleCard extends StatelessWidget {
 
                           return Column(
                             children: [
-                              _buildInfoRow('평단가:', '${avgPrice.toStringAsFixed(0)} 원'),
-                              _buildInfoRow('보유 수량:', '$quantity 주'),
+                              _buildInfoRow(
+                                '평단가:', 
+                                '${avgPrice.toStringAsFixed(0)} 원',
+                                textColor: textColor, // (★수정★) 1번
+                                subTextColor: subTextColor, // (★수정★) 1번
+                              ),
+                              _buildInfoRow(
+                                '보유 수량:', 
+                                '$quantity 주',
+                                textColor: textColor, // (★수정★) 1번
+                                subTextColor: subTextColor, // (★수정★) 1번
+                              ),
                               _buildInfoRow(
                                 '현재 평가손익:', 
                                 '${currentProfitLoss.toStringAsFixed(0)} 원',
                                 valueColor: currentProfitColor,
+                                textColor: textColor, 
+                                subTextColor: subTextColor
                               ),
                               _buildInfoRow(
                                 '현재 수익률:', 
                                 '${currentProfitRate.toStringAsFixed(2)} %',
                                 valueColor: currentProfitColor,
+                                textColor: textColor, 
+                                subTextColor: subTextColor
                               ),
                             ],
                           );
@@ -219,17 +246,17 @@ class CycleCard extends StatelessWidget {
     );
   }
 
-  // UI 헬퍼
-  Widget _buildInfoRow(String title, String value, {Color? valueColor}) {
+  // (★수정★) 1번: 다크모드 색상을 받도록 헬퍼 수정
+  Widget _buildInfoRow(String title, String value, {Color? valueColor, required Color textColor, required Color subTextColor}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(title, style: TextStyle(color: Colors.grey.shade600)),
+        Text(title, style: TextStyle(color: subTextColor)),
         Text(
           value, 
           style: TextStyle(
             fontWeight: FontWeight.bold,
-            color: valueColor ?? Colors.black
+            color: valueColor ?? textColor,
           )
         ),
       ],
