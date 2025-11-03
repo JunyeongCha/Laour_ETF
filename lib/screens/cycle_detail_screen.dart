@@ -1,13 +1,14 @@
 import 'dart:async';
+import 'dart:math'; // (★신규★) 3번: pow() (제곱) 함수 사용을 위해
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // (★신규★) 3번: 숫자 입력을 위해
+import 'package:flutter/services.dart'; 
 import 'package:intl/intl.dart'; 
 import 'package:laour_etf/widgets/cycle_detail/trade_input_dialog.dart';
 import 'package:laour_etf/widgets/cycle_detail/transaction_list.dart';
-import 'package:provider/provider.dart'; // (★신규★) 2번
-import 'package:laour_etf/providers/theme_provider.dart'; // (★신규★) 2번
+import 'package:provider/provider.dart';
+import 'package:laour_etf/providers/theme_provider.dart';
 
 class CycleDetailScreen extends StatefulWidget {
   final String cycleId;
@@ -26,11 +27,12 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
 
   // 2. 실시간 입력을 위한 컨트롤러
   final _currentPriceController = TextEditingController();
-  final _starValueController = TextEditingController();
+  // (★수정★) 1번: Star 값 컨트롤러 제거
+  // final _starValueController = TextEditingController();
   
   final _nameEditController = TextEditingController();
   final _nicknameEditController = TextEditingController();
-  final _totalSeedEditController = TextEditingController(); // (★신규★) 3번
+  final _totalSeedEditController = TextEditingController(); 
   
   bool _isRecalculating = false; 
   double _savedPrice = 0.0; 
@@ -52,15 +54,16 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
     _transactionStream = _transactionsRef.orderBy('date', descending: true).snapshots();
 
     _currentPriceController.addListener(_updateRealTimeProfit);
-    _starValueController.addListener(_updateRealTimeProfit);
+    // (★수정★) 1번: Star 값 리스너 제거
+    // _starValueController.addListener(_updateRealTimeProfit);
 
     _cycleStream.first.then((snapshot) {
       if (mounted && snapshot.exists) {
         final data = snapshot.data() as Map<String, dynamic>;
         final double price = (data['currentPrice'] as num?)?.toDouble() ?? 0.0;
         _currentPriceController.text = price.toString();
-        // (★수정★) 4번: starValue는 3배수 값
-        _starValueController.text = (data['starValue'] as num?)?.toString() ?? '0.0';
+        // (★수정★) 1번: Star 값 컨트롤러 설정 제거
+        // _starValueController.text = (data['starValue'] as num?)?.toString() ?? '0.0';
         _savedPrice = price; 
       }
     });
@@ -74,26 +77,29 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
     }
   }
 
-  // (★수정★) 거래 추가/삭제 시 재계산 로직 (2-Pass)
+  // (★수정★) 2번: T값 공식을 위해 재계산 로직 전면 수정
   Future<void> _recalculateAggregates() async {
     if (mounted) {
       setState(() { _isRecalculating = true; });
     }
 
     try {
+      // (★신규★) 2번: T값 계산을 위해 1회 투자금을 먼저 가져옴
+      final DocumentSnapshot cycleDoc = await _cycleRef.get();
+      final cycleData = cycleDoc.data() as Map<String, dynamic>;
+      final double totalSeed = (cycleData['totalSeed'] as num?)?.toDouble() ?? 1.0;
+      final int splitCount = (cycleData['splitCount'] as num?)?.toInt() ?? 1;
+      final double oneTimeInvestment = (totalSeed == 0 || splitCount == 0) ? 0 : (totalSeed / splitCount);
+
       final QuerySnapshot snapshot = await _transactionsRef.get();
       final allTrades = snapshot.docs;
 
       // --- [Pass 1] 평단가(Avg. Purchase Price) 계산 ---
       double totalBuyCost = 0.0;
       int totalBuyQuantity = 0;
-      Set<String> uniqueDates = {}; 
 
       for (var doc in allTrades) {
         final data = doc.data() as Map<String, dynamic>;
-        
-        final DateTime date = (data['date'] as Timestamp).toDate();
-        uniqueDates.add(DateFormat('yyyy-MM-dd').format(date));
         
         if (data['type'] == 'buy') {
           totalBuyCost += (data['price'] as num).toDouble() * (data['quantity'] as num).toInt();
@@ -122,7 +128,11 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
 
       // --- [Final] 최종 집계 ---
       final int currentQuantity = totalBuyQuantity - totalSellQuantity;
-      final int tValue = uniqueDates.length; 
+      
+      // (★신규★) 2번: 새 T값 공식
+      // T = (순 매수 금액) / 1회 투자금
+      final double netPurchaseAmount = totalBuyCost - totalSellAmount;
+      final double tValue = (oneTimeInvestment == 0) ? 0.0 : (netPurchaseAmount / oneTimeInvestment);
 
       if (currentQuantity < 0) {
         throw Exception("계산 결과 보유 수량이 음수입니다.");
@@ -132,7 +142,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
         'currentPurchaseAmount': totalBuyCost, 
         'avgPrice': avgPrice,                   
         'currentQuantity': currentQuantity,
-        'T_value': tValue,
+        'T_value': tValue, // (★수정★) 2번: 새로운 double T값 저장
         'totalSellAmount': totalSellAmount,     
         'realizedProfit': totalRealizedProfit,  
       });
@@ -234,15 +244,14 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
     }
   }
   
-  // 현재가/Star 값 Firestore에 저장
+  // (★수정★) 1번: Star 값 저장 로직 제거
   Future<void> _saveCurrentData() async {
      try {
         final double price = double.tryParse(_currentPriceController.text) ?? 0.0;
-        final double star = double.tryParse(_starValueController.text) ?? 0.0;
         
         await _cycleRef.update({
           'currentPrice': price,
-          'starValue': star, // (★수정★) 4번: 3배수 값이 저장됨
+          // 'starValue': star, // Star 값은 이제 저장하지 않음
         });
         
         if (mounted) {
@@ -250,7 +259,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
           FocusManager.instance.primaryFocus?.unfocus(); 
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('현재가/Star 값이 저장되었습니다.'),
+              content: Text('현재가가 저장되었습니다.'),
               duration: Duration(seconds: 2),
             ),
           );
@@ -264,18 +273,18 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
       }
   }
 
-  // (★수정★) 1번, 3번: 이름/닉네임/총 시드 수정 다이얼로그
+  // 이름/닉네임/총 시드 수정 다이얼로그
   Future<void> _showEditInfoDialog(String currentName, String currentNickname, double currentSeed) async {
     _nameEditController.text = currentName;
     _nicknameEditController.text = currentNickname;
-    _totalSeedEditController.text = currentSeed.toStringAsFixed(0); // (★신규★) 3번
+    _totalSeedEditController.text = currentSeed.toStringAsFixed(0); 
 
     return showDialog<void>(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('사이클 정보 수정'),
-          content: SingleChildScrollView( // 스크롤 가능하게
+          content: SingleChildScrollView( 
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -287,7 +296,6 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                   controller: _nicknameEditController,
                   decoration: const InputDecoration(labelText: '닉네임 (선택)'),
                 ),
-                // (★신규★) 3번: 총 시드 수정
                 TextField(
                   controller: _totalSeedEditController,
                   decoration: const InputDecoration(labelText: '총 시드 (원)'),
@@ -326,7 +334,6 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                 }
 
                 try {
-                  // (★신규★) 3번: totalSeed 업데이트
                   await _cycleRef.update({
                     'name': newName,
                     'nickname': newNickname,
@@ -380,18 +387,18 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
   @override
   void dispose() {
     _currentPriceController.removeListener(_updateRealTimeProfit);
-    _starValueController.removeListener(_updateRealTimeProfit);
+    // (★수정★) 1번: Star 값 컨트롤러 dispose 제거
+    // _starValueController.removeListener(_updateRealTimeProfit);
     _currentPriceController.dispose();
-    _starValueController.dispose();
+    // _starValueController.dispose();
     _nameEditController.dispose(); 
     _nicknameEditController.dispose(); 
-    _totalSeedEditController.dispose(); // (★신규★) 3번
+    _totalSeedEditController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // (★신규★) 2번: 다크모드 텍스트 색상 처리를 위해
     final themeProvider = context.watch<ThemeProvider>();
     final bool isDarkMode = themeProvider.isDarkMode;
     final Color textColor = isDarkMode ? Colors.white : Colors.black;
@@ -427,18 +434,23 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
         final double avgPrice = (data['avgPrice'] as num?)?.toDouble() ?? 0.0; 
         final int currentQuantity = (data['currentQuantity'] as num?)?.toInt() ?? 0;
         final double currentPurchaseAmount = (data['currentPurchaseAmount'] as num?)?.toDouble() ?? 0.0; 
-        final int tValue = (data['T_value'] as num?)?.toInt() ?? 0;
+        
+        // (★수정★) 2번: T_value는 이제 double (소수점)
+        final double tValue = (data['T_value'] as num?)?.toDouble() ?? 0.0;
+        
         final double realizedProfit = (data['realizedProfit'] as num?)?.toDouble() ?? 0.0; 
         final bool isManuallyCompleted = (data['isManuallyCompleted'] as bool?) ?? false;
 
         // (C. 컨트롤러 실시간 값)
-        // (★수정★) 4번: 3배수 Star 값
-        final double starValue_3x = double.tryParse(_starValueController.text) ?? 0.0;
         final double currentPrice = double.tryParse(_currentPriceController.text) ?? 0.0;
         
-        // (★신규★) 4번: 실제 계산에 사용할 2배수 Star 값
-        final double starValue = (starValue_3x * 2) / 3.0;
-
+        // (★신규★) 3번: Star 값 자동 계산
+        // 공식: Star값 = 목표수익률 - T * 100 / (목표수익률)^2
+        double starValue = 0.0;
+        if (targetProfitRate > 0) {
+          starValue = targetProfitRate - (tValue * 100 / pow(targetProfitRate, 2));
+        }
+        
         final bool isFirstBuy = (avgPrice == 0 && currentQuantity == 0);
         final double displayAvgPrice = isFirstBuy ? currentPrice : avgPrice;
 
@@ -453,13 +465,13 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
           currentProfitColor = currentProfitLoss >= 0 ? Colors.red : Colors.blue.shade700;
         }
 
-        // (E. 매수 지침)
+        // (E. 매수 지침) (★수정★) 3번: starValue (자동계산값) 사용
         final double calcBuyPrice = displayAvgPrice * (1 + (starValue / 100)); 
         final double oneTimeSplitAmount = oneTimeInvestment / 2;
         final double buyQtyAtAvg = (displayAvgPrice == 0) ? 0 : (oneTimeSplitAmount / displayAvgPrice);
         final double buyQtyAtStar = (calcBuyPrice == 0) ? 0 : (oneTimeSplitAmount / calcBuyPrice);
         
-        // (F. 매도 지침)
+        // (F. 매도 지침) (★수정★) 3번: starValue (자동계산값) 사용
         final double sellPrice1 = calcBuyPrice + 1;
         final double sellQty1 = currentQuantity / 4.0;
         final double sellPrice2 = displayAvgPrice * (1 + (targetProfitRate / 100));
@@ -495,9 +507,8 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
             actions: [
               IconButton(
                 icon: const Icon(Icons.edit_outlined),
-                tooltip: '이름/닉네임/시드 수정', // (★수정★) 3번
+                tooltip: '이름/닉네임/시드 수정', 
                 onPressed: () {
-                  // (★수정★) 3번
                   _showEditInfoDialog(name, nickname, totalSeed); 
                 },
               ),
@@ -514,17 +525,14 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                     decoration: const InputDecoration(labelText: '현재 주가 입력 (원)'),
                     keyboardType: TextInputType.number,
                   ),
-                  TextField(
-                    controller: _starValueController,
-                    // (★수정★) 4번: 라벨 변경
-                    decoration: const InputDecoration(labelText: '오늘의 3배수 Star 값 (%)'),
-                    keyboardType: TextInputType.number,
-                  ),
-                  const SizedBox(height: 12),
+                  // (★수정★) 1번: Star 값 입력 필드 제거
+                  // TextField( ... ),
+                  
+                  // (★수정★) 1번: '현재가 / Star 값' -> '현재가'
                   Center(
                     child: ElevatedButton.icon(
                       icon: const Icon(Icons.save, size: 18),
-                      label: const Text('현재가 / Star 값 저장'),
+                      label: const Text('현재가 저장'),
                       onPressed: _saveCurrentData,
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -536,8 +544,8 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                     '현재 수익률:', 
                     '${currentProfitRate.toStringAsFixed(2)} %', 
                     valueColor: currentProfitColor,
-                    textColor: textColor, // (★수정★) 2번
-                    subTextColor: subTextColor, // (★수정★) 2번
+                    textColor: textColor, 
+                    subTextColor: subTextColor, 
                   ),
                   _buildInfoRow(
                     '현재 손익:', 
@@ -588,13 +596,13 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                     ),
                   ),
 
-                _buildInfoCard("사이클 현황 (진행 $tValue / $splitCount 분할)", [
+                // (★수정★) 2번: T값 소수점 표시
+                _buildInfoCard("사이클 현황 (진행 ${tValue.toStringAsFixed(2)} / $splitCount 분할)", [
                   _buildInfoRow(
                     '총 시드:', 
                     '${totalSeed.toStringAsFixed(0)} 원',
-                    textColor: textColor, // (★수정★) 2번
-                    subTextColor: subTextColor, // (★수정★) 2번
-                    // (★신규★) 3번: 수정 기능
+                    textColor: textColor, 
+                    subTextColor: subTextColor, 
                     trailing: Icon(Icons.edit, size: 16, color: subTextColor),
                     onTap: () => _showEditInfoDialog(name, nickname, totalSeed),
                   ),
@@ -632,18 +640,18 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                   ),
                 ]),
                 
-                // (★수정★) 4번: 3배수 Star 값으로 라벨 변경
-                _buildInfoCard("🔴 매수 지침 (3배수 Star = $starValue_3x%)", [
+                // (★수정★) 3번: 계산된 Star 값으로 라벨 변경
+                _buildInfoCard("🔴 매수 지침 (계산된 Star = ${starValue.toStringAsFixed(2)}%)", [
                   _buildDirectiveRow(
                     isFirstBuy ? 'LOC 현재가:' : 'LOC 평단:',
                     '${displayAvgPrice.toStringAsFixed(0)} 원 X ${buyQtyAtAvg.toStringAsFixed(4)} 주',
                     valueColor: Colors.red.shade700,
-                    textColor: textColor, // (★수정★) 2번
-                    subTextColor: subTextColor, // (★수정★) 2번
+                    textColor: textColor, 
+                    subTextColor: subTextColor, 
                   ),
                   _buildDirectiveRow(
-                    // (★수정★) 4번: 3배수 Star 값으로 라벨 변경
-                    'LOC star:',
+                    // (★수정★) 3번: 계산된 Star 값으로 라벨 변경
+                    'LOC ${starValue.toStringAsFixed(2)}%:',
                     '${calcBuyPrice.toStringAsFixed(0)} 원 X ${buyQtyAtStar.toStringAsFixed(4)} 주',
                     valueColor: Colors.red.shade700,
                     textColor: textColor, 
@@ -652,9 +660,8 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                   const Divider(height: 20),
                   Text(
                     '+@ 폭락장 대비 추가 매수 (규칙 2)', 
-                    style: TextStyle(fontWeight: FontWeight.bold, color: textColor) // (★수정★) 2번
+                    style: TextStyle(fontWeight: FontWeight.bold, color: textColor) 
                   ),
-                  // (★수정★) 3번: 퍼센트 표시
                   _buildDirectiveRow('LOC (평단*98.067%):', '${(displayAvgPrice * 0.98067).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
                   _buildDirectiveRow('LOC (평단*95.267%):', '${(displayAvgPrice * 0.95267).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
                   _buildDirectiveRow('LOC (평단*92.667%):', '${(displayAvgPrice * 0.92667).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
@@ -665,12 +672,12 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
 
                 _buildInfoCard("🔵 매도 지침 (목표 = $targetProfitRate%)", [
                   _buildDirectiveRow( 
-                    // (★수정★) 4번: 3배수 Star 값으로 라벨 변경
-                    'LOC star:',
+                    // (★수정★) 3번: 계산된 Star 값으로 라벨 변경
+                    'LOC ${starValue.toStringAsFixed(2)}%:',
                     '${sellPrice1.toStringAsFixed(0)} 원 X ${sellQty1.toStringAsFixed(4)} 주',
                     valueColor: Colors.blue.shade700,
-                    textColor: textColor, // (★수정★) 2번
-                    subTextColor: subTextColor, // (★수정★) 2번
+                    textColor: textColor, 
+                    subTextColor: subTextColor, 
                   ),
                   _buildDirectiveRow(
                     'After $targetProfitRate%:',
@@ -690,7 +697,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                Text('거래 내역', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textColor)), // (★수정★) 2번
+                Text('거래 내역', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textColor)), 
                 TransactionList(
                   transactionStream: _transactionStream,
                   onDelete: (transactionId, type, quantity, date, price) => _onDeleteTrade(
@@ -733,13 +740,12 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // (★수정★) 2번: 다크모드
             Text(
               title, 
               style: TextStyle(
                 fontSize: 18, 
                 fontWeight: FontWeight.bold,
-                color: Theme.of(context).textTheme.titleLarge?.color, // 다크모드 자동 글씨 색상
+                color: Theme.of(context).textTheme.titleLarge?.color, 
               )
             ),
             const SizedBox(height: 12),
@@ -752,7 +758,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
   
   // (★수정★) 2번, 3번: 헬퍼 함수가 다크모드 색상 및 onTap/trailing을 받도록 수정
   Widget _buildInfoRow(String title, String value, {Color? valueColor, required Color textColor, required Color subTextColor, Widget? trailing, VoidCallback? onTap}) {
-    return InkWell( // (★신규★) 3번: 탭 가능하도록
+    return InkWell( 
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -760,7 +766,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(title, style: TextStyle(color: subTextColor)),
-            Row( // (★신규★) 3번: 값 + 트레일링 아이콘
+            Row( 
               children: [
                 Text(
                   value, 
@@ -787,12 +793,12 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: TextStyle(color: subTextColor)), // (★수정★) 2번
+          Text(title, style: TextStyle(color: subTextColor)), 
           Text(
             value, 
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: valueColor ?? textColor, // (★수정★) 2번
+              color: valueColor ?? textColor, 
             ),
           ),
         ],

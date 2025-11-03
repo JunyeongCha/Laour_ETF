@@ -17,7 +17,8 @@ class _CycleCreateScreenState extends State<CycleCreateScreen> {
   final _splitCountController = TextEditingController();
   final _targetProfitRateController = TextEditingController();
   final _currentPriceController = TextEditingController(); 
-  final _starValueController = TextEditingController(); 
+  // (★수정★) 1번: Star 값 컨트롤러 제거
+  // final _starValueController = TextEditingController(); 
 
   bool _isLoading = false;
 
@@ -37,7 +38,8 @@ class _CycleCreateScreenState extends State<CycleCreateScreen> {
       final int splitCount = int.tryParse(_splitCountController.text) ?? 1;
       final double targetProfitRate = double.tryParse(_targetProfitRateController.text) ?? 0.0;
       final double currentPrice = double.tryParse(_currentPriceController.text) ?? 0.0; 
-      final double starValue = double.tryParse(_starValueController.text) ?? 0.0; 
+      // (★수정★) 1번: Star 값 변수 제거
+      // final double starValue = double.tryParse(_starValueController.text) ?? 0.0; 
 
       final Map<String, dynamic> cycleData = {
         'name': _nameController.text.trim(),
@@ -48,14 +50,15 @@ class _CycleCreateScreenState extends State<CycleCreateScreen> {
         'createdAt': Timestamp.now(),
         
         'currentPrice': currentPrice, 
-        'starValue': starValue, // (★수정★) 4번: 이 값은 3배수 Star 값으로 저장됨
+        // (★수정★) 1번: starValue 필드 저장 제거
+        // 'starValue': starValue,       
         
         // 초기화 필드
         'currentPurchaseAmount': 0.0,
         'totalSellAmount': 0.0,
         'currentQuantity': 0,
         'avgPrice': 0.0,
-        'T_value': 0,
+        'T_value': 0.0, // (★수정★) 2번: T값은 이제 double형이므로 0.0으로 초기화
         'realizedProfit': 0.0, 
         'isManuallyCompleted': false,
       };
@@ -91,7 +94,8 @@ class _CycleCreateScreenState extends State<CycleCreateScreen> {
     _splitCountController.dispose();
     _targetProfitRateController.dispose();
     _currentPriceController.dispose(); 
-    _starValueController.dispose(); 
+    // (★수정★) 1번: Star 값 컨트롤러 dispose 제거
+    // _starValueController.dispose(); 
     super.dispose();
   }
 
@@ -138,23 +142,8 @@ class _CycleCreateScreenState extends State<CycleCreateScreen> {
               ),
               const SizedBox(height: 16),
               
-              TextFormField(
-                controller: _starValueController,
-                // (★수정★) 4번: 라벨 변경
-                decoration: const InputDecoration(
-                  labelText: '초기 3배수 Star 값 (%) (필수)',
-                  helperText: '예: TQQQ 3배수 Star 값 입력 시, 2배수 ETF 공식에 맞게 자동 변환됩니다.',
-                ),
-                keyboardType: TextInputType.number,
-                validator: (value) {
-                  if (value == null || value.isEmpty) return 'Star 값을 입력하세요.';
-                  if (double.tryParse(value) == null) {
-                    return '유효한 숫자를 입력하세요. (마이너스 가능)';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
+              // (★수정★) 1번: Star 값 입력 필드 완전히 제거
+              // TextFormField( ... ),
 
               TextFormField(
                 controller: _totalSeedController,
