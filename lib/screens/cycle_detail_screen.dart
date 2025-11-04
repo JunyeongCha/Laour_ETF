@@ -2,12 +2,12 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // (★신규★) 3번: 숫자 입력을 위해
+import 'package:flutter/services.dart'; 
 import 'package:intl/intl.dart'; 
 import 'package:laour_etf/widgets/cycle_detail/trade_input_dialog.dart';
 import 'package:laour_etf/widgets/cycle_detail/transaction_list.dart';
-import 'package:provider/provider.dart'; // (★신규★) 2번
-import 'package:laour_etf/providers/theme_provider.dart'; // (★신규★) 2번
+import 'package:provider/provider.dart'; 
+import 'package:laour_etf/providers/theme_provider.dart'; 
 
 class CycleDetailScreen extends StatefulWidget {
   final String cycleId;
@@ -30,7 +30,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
   
   final _nameEditController = TextEditingController();
   final _nicknameEditController = TextEditingController();
-  final _totalSeedEditController = TextEditingController(); // (★신규★) 3번
+  final _totalSeedEditController = TextEditingController(); 
   
   bool _isRecalculating = false; 
   double _savedPrice = 0.0; 
@@ -478,6 +478,12 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
         }
         
         bool showSplitFinished = (tValue >= splitCount && !isManuallyCompleted && currentQuantity > 0);
+        
+        // (★신규★) 목표 달성률 계산
+        double achievementRate = (targetProfitRate == 0 || currentProfitRate < 0) 
+            ? 0 
+            : (currentProfitRate / targetProfitRate);
+        achievementRate = achievementRate.clamp(0.0, 1.0); // 0% ~ 100%
 
         return Scaffold(
           appBar: AppBar(
@@ -545,6 +551,40 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                     valueColor: currentProfitColor,
                     textColor: textColor, 
                     subTextColor: subTextColor
+                  ),
+                  
+                  // (★신규★) 목표 수익률 및 달성률
+                  const Divider(height: 16),
+                  _buildInfoRow(
+                    '목표 수익률:', 
+                    '${targetProfitRate.toStringAsFixed(1)} %',
+                    textColor: textColor, 
+                    subTextColor: subTextColor
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4.0),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('달성률:', style: TextStyle(color: subTextColor)),
+                            Text(
+                              '${(achievementRate * 100).toStringAsFixed(1)} %',
+                              style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        LinearProgressIndicator(
+                          value: achievementRate,
+                          minHeight: 6,
+                          borderRadius: BorderRadius.circular(3),
+                          backgroundColor: Colors.grey.shade300,
+                          color: Colors.red,
+                        ),
+                      ],
+                    ),
                   ),
                 ]),
                 
@@ -633,7 +673,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                 ]),
                 
                 // (★수정★) 4번: 3배수 Star 값으로 라벨 변경
-                _buildInfoCard("🔴 매수 지침 (3배수 Star = $starValue_3x%)", [
+                _buildInfoCard("🔴 매수 지침 (2배수 Star = ${starValue.toStringAsFixed(2)}%)", [
                   _buildDirectiveRow(
                     isFirstBuy ? 'LOC 현재가:' : 'LOC 평단:',
                     '${displayAvgPrice.toStringAsFixed(0)} 원 X ${buyQtyAtAvg.toStringAsFixed(4)} 주',
@@ -642,8 +682,8 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                     subTextColor: subTextColor, // (★수정★) 2번
                   ),
                   _buildDirectiveRow(
-                    // (★수정★) 4번: 3배수 Star 값으로 라벨 변경
-                    'LOC star:',
+                    // (★수정★) 2번: 라벨을 2배수 Star 값으로 단순화
+                    'LOC ${starValue.toStringAsFixed(2)}%:',
                     '${calcBuyPrice.toStringAsFixed(0)} 원 X ${buyQtyAtStar.toStringAsFixed(4)} 주',
                     valueColor: Colors.red.shade700,
                     textColor: textColor, 
@@ -651,26 +691,26 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                   ),
                   const Divider(height: 20),
                   Text(
-                    '+@ 폭락장 대비 추가 매수 (규칙 2)', 
+                    '+@ 폭락장 대비 추가 매수 (2배수 기준)', // (★수정★) 4번 
                     style: TextStyle(fontWeight: FontWeight.bold, color: textColor) // (★수정★) 2번
                   ),
-                  // (★수정★) 3번: 퍼센트 표시
-                  _buildDirectiveRow('LOC (평단*98.067%):', '${(displayAvgPrice * 0.98067).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
-                  _buildDirectiveRow('LOC (평단*95.267%):', '${(displayAvgPrice * 0.95267).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
-                  _buildDirectiveRow('LOC (평단*92.667%):', '${(displayAvgPrice * 0.92667).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
-                  _buildDirectiveRow('LOC (평단*90.267%):', '${(displayAvgPrice * 0.90267).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
-                  _buildDirectiveRow('LOC (평단*88.133%):', '${(displayAvgPrice * 0.88133).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
-                  _buildDirectiveRow('LOC (평단*86.133%):', '${(displayAvgPrice * 0.86133).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
+                  // (★수정★) 4번: 퍼센트 및 배율 변경
+                  _buildDirectiveRow('LOC (평단*98.07%):', '${(displayAvgPrice * 0.98067).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
+                  _buildDirectiveRow('LOC (평단*95.27%):', '${(displayAvgPrice * 0.95267).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
+                  _buildDirectiveRow('LOC (평단*92.67%):', '${(displayAvgPrice * 0.92667).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
+                  _buildDirectiveRow('LOC (평단*90.27%):', '${(displayAvgPrice * 0.90267).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
+                  _buildDirectiveRow('LOC (평단*88.13%):', '${(displayAvgPrice * 0.88133).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
+                  _buildDirectiveRow('LOC (평단*86.13%):', '${(displayAvgPrice * 0.86133).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
                 ]),
 
                 _buildInfoCard("🔵 매도 지침 (목표 = $targetProfitRate%)", [
                   _buildDirectiveRow( 
-                    // (★수정★) 4번: 3배수 Star 값으로 라벨 변경
-                    'LOC star:',
+                    // (★수정★) 2번: 라벨을 2배수 Star 값으로 단순화
+                    'LOC ${starValue.toStringAsFixed(2)}%:',
                     '${sellPrice1.toStringAsFixed(0)} 원 X ${sellQty1.toStringAsFixed(4)} 주',
                     valueColor: Colors.blue.shade700,
-                    textColor: textColor, // (★수정★) 2번
-                    subTextColor: subTextColor, // (★수정★) 2번
+                    textColor: textColor, 
+                    subTextColor: subTextColor, 
                   ),
                   _buildDirectiveRow(
                     'After $targetProfitRate%:',
@@ -690,7 +730,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                Text('거래 내역', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textColor)), // (★수정★) 2번
+                Text('거래 내역', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textColor)), 
                 TransactionList(
                   transactionStream: _transactionStream,
                   onDelete: (transactionId, type, quantity, date, price) => _onDeleteTrade(
@@ -733,13 +773,12 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // (★수정★) 2번: 다크모드
             Text(
               title, 
               style: TextStyle(
                 fontSize: 18, 
                 fontWeight: FontWeight.bold,
-                color: Theme.of(context).textTheme.titleLarge?.color, // 다크모드 자동 글씨 색상
+                color: Theme.of(context).textTheme.titleLarge?.color, 
               )
             ),
             const SizedBox(height: 12),
@@ -752,7 +791,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
   
   // (★수정★) 2번, 3번: 헬퍼 함수가 다크모드 색상 및 onTap/trailing을 받도록 수정
   Widget _buildInfoRow(String title, String value, {Color? valueColor, required Color textColor, required Color subTextColor, Widget? trailing, VoidCallback? onTap}) {
-    return InkWell( // (★신규★) 3번: 탭 가능하도록
+    return InkWell( 
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -760,7 +799,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(title, style: TextStyle(color: subTextColor)),
-            Row( // (★신규★) 3번: 값 + 트레일링 아이콘
+            Row( 
               children: [
                 Text(
                   value, 
@@ -787,12 +826,12 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: TextStyle(color: subTextColor)), // (★수정★) 2번
+          Text(title, style: TextStyle(color: subTextColor)), 
           Text(
             value, 
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: valueColor ?? textColor, // (★수정★) 2번
+              color: valueColor ?? textColor, 
             ),
           ),
         ],

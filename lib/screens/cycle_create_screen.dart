@@ -55,7 +55,7 @@ class _CycleCreateScreenState extends State<CycleCreateScreen> {
         'totalSellAmount': 0.0,
         'currentQuantity': 0,
         'avgPrice': 0.0,
-        'T_value': 0,
+        'T_value': 0, // (T_value는 재계산 시 int로 계산됨, 이전 코드 유지)
         'realizedProfit': 0.0, 
         'isManuallyCompleted': false,
       };

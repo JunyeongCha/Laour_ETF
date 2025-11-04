@@ -2,8 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:laour_etf/screens/cycle_completed_screen.dart';
 import 'package:laour_etf/screens/cycle_detail_screen.dart';
-import 'package:provider/provider.dart'; // (★신규★)
-import 'package:laour_etf/providers/theme_provider.dart'; // (★신규★)
+import 'package:provider/provider.dart'; 
+import 'package:laour_etf/providers/theme_provider.dart'; 
 
 class CycleCard extends StatelessWidget {
   final QueryDocumentSnapshot cycleDoc;
@@ -40,7 +40,7 @@ class CycleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // (★신규★) 1번: 다크모드 텍스트 색상 처리를 위해
+    // (★수정★) 1번: 다크모드 텍스트 색상 처리를 위해
     final themeProvider = context.watch<ThemeProvider>();
     final bool isDarkMode = themeProvider.isDarkMode;
     final Color textColor = isDarkMode ? Colors.white : Colors.black;
@@ -54,6 +54,9 @@ class CycleCard extends StatelessWidget {
     final int quantity = (data['currentQuantity'] as num?)?.toInt() ?? 0;
     final double purchaseAmount = (data['currentPurchaseAmount'] as num?)?.toDouble() ?? 0.0; // "총 매수 금액"
     final double totalSeed = (data['totalSeed'] as num?)?.toDouble() ?? 1.0;
+    
+    // (★신규★) 목표 수익률
+    final double targetProfitRate = (data['targetProfitRate'] as num?)?.toDouble() ?? 0.0;
     
     final double realizedProfit = (data['realizedProfit'] as num?)?.toDouble() ?? 0.0;
     final double currentPrice = (data['currentPrice'] as num?)?.toDouble() ?? 0.0;
@@ -198,20 +201,26 @@ class CycleCard extends StatelessWidget {
                             currentProfitRate = ((currentPrice / avgPrice) - 1) * 100;
                             currentProfitColor = currentProfitLoss >= 0 ? Colors.red : Colors.blue.shade700;
                           }
+                          
+                          // (★신규★) 목표 달성률 계산
+                          double achievementRate = (targetProfitRate == 0 || currentProfitRate < 0) 
+                              ? 0 
+                              : (currentProfitRate / targetProfitRate);
+                          achievementRate = achievementRate.clamp(0.0, 1.0); // 0% ~ 100%
 
                           return Column(
                             children: [
                               _buildInfoRow(
                                 '평단가:', 
                                 '${avgPrice.toStringAsFixed(0)} 원',
-                                textColor: textColor, // (★수정★) 1번
-                                subTextColor: subTextColor, // (★수정★) 1번
+                                textColor: textColor, 
+                                subTextColor: subTextColor, 
                               ),
                               _buildInfoRow(
                                 '보유 수량:', 
                                 '$quantity 주',
-                                textColor: textColor, // (★수정★) 1번
-                                subTextColor: subTextColor, // (★수정★) 1번
+                                textColor: textColor, 
+                                subTextColor: subTextColor, 
                               ),
                               _buildInfoRow(
                                 '현재 평가손익:', 
@@ -227,14 +236,37 @@ class CycleCard extends StatelessWidget {
                                 textColor: textColor, 
                                 subTextColor: subTextColor
                               ),
+                              
+                              // (★신규★) 목표 수익률 표시
+                              // (★수정★) 1번: 목표 수익률 및 달성률 UI 변경
+                              const Divider(height: 16),
+                              _buildInfoRow(
+                                '목표 수익률:', 
+                                '${targetProfitRate.toStringAsFixed(1)} %',
+                                textColor: textColor, 
+                                subTextColor: subTextColor
+                              ),
+                              // (★신규★) 1번: 달성률 텍스트 Row
+                              _buildInfoRow(
+                                '달성률:',
+                                '${(achievementRate * 100).toStringAsFixed(1)} %',
+                                textColor: textColor, 
+                                subTextColor: subTextColor
+                              ),
+                              // (★신규★) 1번: 달성률 프로그레스 바
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(0, 4, 0, 4), // 위아래 패딩 추가
+                                child: LinearProgressIndicator(
+                                  value: achievementRate,
+                                  minHeight: 6,
+                                  borderRadius: BorderRadius.circular(3),
+                                  backgroundColor: Colors.grey.shade300,
+                                  color: Colors.red,
+                                ),
+                              ),
                             ],
                           );
                         },
-                      ),
-                      const SizedBox(height: 8),
-                      LinearProgressIndicator(
-                        value: seedUsagePercent / 100,
-                        borderRadius: BorderRadius.circular(5),
                       ),
                     ],
                   ),

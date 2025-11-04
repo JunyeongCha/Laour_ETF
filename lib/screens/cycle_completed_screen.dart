@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart'; // (★신규★)
-import 'package:laour_etf/providers/theme_provider.dart'; // (★신규★)
+import 'package:provider/provider.dart'; // (★신규★) 2번
+import 'package:laour_etf/providers/theme_provider.dart'; // (★신규★) 2번
 
 class CycleCompletedScreen extends StatelessWidget {
   // CycleCard에서 전달받을 사이클 문서 데이터
