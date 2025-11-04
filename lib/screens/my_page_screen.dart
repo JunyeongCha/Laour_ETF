@@ -1,4 +1,4 @@
-// // lib/screens/my_page_screen.dart (5-5 수정)
+// // lib/screens/my_page_screen.dart (수정)
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -7,7 +7,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:laour_etf/providers/theme_provider.dart';
 import 'package:laour_etf/screens/target_setting_screen.dart';
-import 'package:laour_etf/screens/name_change_screen.dart'; // (★신규★)
+import 'package:laour_etf/screens/name_change_screen.dart'; 
+import 'package:laour_etf/screens/password_change_screen.dart'; // (★신규★)
 
 class MyPageScreen extends StatelessWidget {
   const MyPageScreen({super.key});
@@ -38,7 +39,7 @@ class MyPageScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16.0),
         children: [
-          // --- 1. 내 정보 섹션 (5-5 수정) ---
+          // --- 1. 내 정보 섹션 ---
           const Text(
             '내 정보',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -56,8 +57,6 @@ class MyPageScreen extends StatelessWidget {
                   ),
                 ),
                 
-                // (★수정★)
-                // StreamBuilder가 '이름'과 '목표/수익' 모두를 감싸도록 수정
                 StreamBuilder<DocumentSnapshot>(
                   stream: userDocStream,
                   builder: (context, userSnapshot) {
@@ -69,14 +68,12 @@ class MyPageScreen extends StatelessWidget {
                         userSnapshot.hasData && 
                         userSnapshot.data!.exists) {
                        final userData = userSnapshot.data!.data() as Map<String, dynamic>;
-                       currentName = userData['name'] ?? '이름 없음'; // (★신규★) 이름 가져오기
+                       currentName = userData['name'] ?? '이름 없음'; 
                        targetProfit = (userData['targetProfit'] as num?)?.toDouble() ?? 0.0;
                     }
 
-                    // (★신규★) 이름 + 수익 섹션을 Column으로 묶음
                     return Column(
-                      children: [ // <-- children: [
-                        // (★신규★) 이름 변경 ListTile
+                      children: [ 
                         ListTile(
                           leading: const Icon(Icons.person_outline),
                           title: const Text('이름'),
@@ -88,9 +85,8 @@ class MyPageScreen extends StatelessWidget {
                               MaterialPageRoute(builder: (context) => const NameChangeScreen()),
                             );
                           },
-                        ), // <-- ListTile
+                        ), 
 
-                        // (기존) 누적 총 수익 StreamBuilder
                         StreamBuilder<QuerySnapshot>(
                           stream: completedCyclesStream,
                           builder: (context, cycleSnapshot) {
@@ -176,17 +172,17 @@ class MyPageScreen extends StatelessWidget {
                               ],
                             );
                           },
-                        ), // <-- StreamBuilder 2
-                      ], // (★FIX★) 여기가 '}'가 아닌 ']' 였습니다.
-                    ); // (★FIX★) 여기가 ')'가 아닌 '}' 였습니다.
-                  }, // (★FIX★) 여기가 '}'가 아닌 ')' 였습니다.
-                ), // (★FIX★) 여기가 ')'가 아닌 '}' 였습니다.
+                        ), 
+                      ], 
+                    ); 
+                  }, 
+                ), 
               ],
             ),
           ),
           const SizedBox(height: 24),
 
-          // --- 2. 환경 설정 섹션 (5-5 수정) ---
+          // --- 2. 환경 설정 섹션 ---
           const Text(
             '환경 설정',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -222,7 +218,11 @@ class MyPageScreen extends StatelessWidget {
                   title: const Text('비밀번호 변경'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
-                    // (미래에 구현)
+                    // (★신규★) 비밀번호 변경 화면으로 이동
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const PasswordChangeScreen()),
+                    );
                   },
                 ),
                 ListTile(

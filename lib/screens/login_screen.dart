@@ -2,11 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:laour_etf/auth/auth_service.dart'; 
 import 'package:laour_etf/screens/signup_screen.dart';
 import 'package:provider/provider.dart'; 
-import 'package:laour_etf/screens/account_picker_screen.dart'; // (★신규★)
-import 'package:laour_etf/auth/secure_storage_service.dart'; // (★신규★)
-import 'package:laour_etf/auth/auth_wrapper.dart'; // (★신규★)
+import 'package:laour_etf/auth/auth_wrapper.dart'; 
 
-// (★수정★) StatelessWidget으로 유지 (이전 단계 롤백)
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
 
@@ -63,7 +60,6 @@ class LoginScreen extends StatelessWidget {
                   enabled: !authService.isLoading,
                 ),
                 
-                // (★수정★) 6-3: 체크박스 제거
                 const SizedBox(height: 20),
                 
                 if (authService.isLoading)
@@ -71,7 +67,6 @@ class LoginScreen extends StatelessWidget {
                 else
                   ElevatedButton(
                     onPressed: () {
-                      // (★수정★) 6-3: saveAccount 파라미터 제거
                       context.read<AuthService>().signIn(
                             emailController.text.trim(),
                             passwordController.text.trim(),

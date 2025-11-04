@@ -27,7 +27,6 @@ class _AccountPickerScreenState extends State<AccountPickerScreen> {
       final String? password = await _storageService.readPassword(email);
       if (password == null) throw Exception("저장된 비밀번호를 찾을 수 없습니다.");
       
-      // (★수정★) 6-3: saveAccount 파라미터 제거
       final success = await context.read<AuthService>().signIn(email, password);
 
       if (!success && mounted) {
@@ -47,7 +46,7 @@ class _AccountPickerScreenState extends State<AccountPickerScreen> {
     }
   }
 
-  // (★수정★) 6-2: 이 함수는 존재하지만, 아래 build()에서 호출하지 않음
+  // 계정 삭제 (비활성화 상태)
   void _deleteAccount(String email) async {
     bool confirmDelete = await showDialog(
       context: context,
@@ -73,7 +72,7 @@ class _AccountPickerScreenState extends State<AccountPickerScreen> {
       } catch (e) {
          if (mounted) {
            ScaffoldMessenger.of(context).showSnackBar(
-             SnackBar(content: Text('삭제 실패 (환경 설정 오류): ${e.toString()}')),
+             SnackBar(content: Text('삭제 실패 (환경 설정 오류): ${e.toString()}'))
            );
          }
       }
@@ -110,7 +109,7 @@ class _AccountPickerScreenState extends State<AccountPickerScreen> {
                       title: Text(email),
                       leading: const Icon(Icons.account_circle),
                       onTap: isAuthLoading ? null : () => _loginWithSavedAccount(email),
-                      // (★수정★) 6-2: 삭제 버튼 비활성화
+                      // 삭제 버튼 비활성화
                       trailing: IconButton(
                         icon: const Icon(Icons.delete_outline, color: Colors.grey),
                         onPressed: null, // ★비활성화★
@@ -127,9 +126,9 @@ class _AccountPickerScreenState extends State<AccountPickerScreen> {
               onPressed: isAuthLoading ? null : () { 
                 context.read<AuthService>().clearState();
                 
-                // (★핵심 수정★) 
-                // "뒤로 가기" 버튼을 만들기 위해 pushReplacement -> push로 변경
-                Navigator.of(context).push(
+                // (★수정★) 
+                // "뒤로가기" 버튼이 필요 없으므로 pushReplacement로 되돌립니다.
+                Navigator.of(context).pushReplacement(
                   MaterialPageRoute(builder: (context) => const LoginScreen()),
                 );
               }, 

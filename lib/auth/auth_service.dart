@@ -73,12 +73,52 @@ class AuthService with ChangeNotifier {
       // 회원가입 시에는 "무조건 저장"
       await _storageService.saveAccount(email, password);
       
-      // 회원가입 성공 시 로딩 상태 'false'로 변경
+      // (★핵심 버그 수정★) 회원가입 성공 시 로딩 상태 'false'로 변경
       _setLoading(false);
       return true;
 
     } on FirebaseAuthException catch (e) {
       _setError('회원가입 실패: ${e.message}');
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  // (★신규★) 비밀번호 변경 함수
+  Future<bool> changePassword(String currentPassword, String newPassword) async {
+    _setLoading(true);
+    _setError('');
+
+    try {
+      final User? user = _auth.currentUser;
+      if (user == null || user.email == null) {
+        throw FirebaseAuthException(code: 'no-user', message: '로그인된 사용자가 없습니다.');
+      }
+      
+      final String email = user.email!;
+      
+      // 1. 재인증 (현재 비밀번호 확인)
+      AuthCredential credential = EmailAuthProvider.credential(
+        email: email, 
+        password: currentPassword,
+      );
+      await user.reauthenticateWithCredential(credential);
+      
+      // 2. Firebase Auth 비밀번호 변경
+      await user.updatePassword(newPassword);
+      
+      // 3. (★핵심★) 계정선택창(SecureStorage)에도 새 비밀번호 반영
+      await _storageService.saveAccount(email, newPassword);
+      
+      _setLoading(false);
+      return true;
+
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'wrong-password') {
+        _setError('현재 비밀번호가 일치하지 않습니다.');
+      } else {
+        _setError('비밀번호 변경 실패: ${e.message}');
+      }
       _setLoading(false);
       return false;
     }
