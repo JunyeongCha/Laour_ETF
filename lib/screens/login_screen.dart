@@ -28,12 +28,11 @@ class LoginScreen extends StatelessWidget {
           appBar: AppBar(
             title: const Text('라오어 ETF - 로그인'),
             
-            // (★핵심 수정★) "계정 선택으로 돌아가기" 버튼
+            // "계정 선택으로 돌아가기" 버튼
             leading: IconButton(
               icon: const Icon(Icons.arrow_back),
               tooltip: '계정 선택으로 돌아가기',
               onPressed: () {
-                // (★핵심 수정★) 상태 초기화 후 AuthWrapper로 복귀
                 authService.clearState();
                 Navigator.of(context).pushAndRemoveUntil(
                   MaterialPageRoute(builder: (context) => const AuthWrapper()),
@@ -66,11 +65,21 @@ class LoginScreen extends StatelessWidget {
                   const CircularProgressIndicator()
                 else
                   ElevatedButton(
-                    onPressed: () {
-                      context.read<AuthService>().signIn(
+                    // (★핵심 수정★) onPressed를 async로 변경
+                    onPressed: () async {
+                      bool success = await context.read<AuthService>().signIn(
                             emailController.text.trim(),
                             passwordController.text.trim(),
                           );
+                      
+                      // (★핵심 수정★)
+                      // 로그인이 성공하면, 스택의 모든 화면 (Login, Picker)을 닫고
+                      // AuthWrapper가 HomeScreen을 그리도록 합니다.
+                      if (success && context.mounted) {
+                        Navigator.of(context).popUntil((route) => route.isFirst);
+                      }
+                      // 실패하면 AuthService가 알아서 isLoading:false로 변경하고
+                      // 스낵바를 띄우므로, 여기서는 아무것도 안 해도 됩니다.
                     },
                     child: const Text('로그인'),
                     style: ElevatedButton.styleFrom(
