@@ -46,7 +46,7 @@ class _AccountPickerScreenState extends State<AccountPickerScreen> {
     }
   }
 
-  // 계정 삭제 (비활성화 상태)
+  // (★수정★) 6-2: 이 함수를 활성화
   void _deleteAccount(String email) async {
     bool confirmDelete = await showDialog(
       context: context,
@@ -64,6 +64,9 @@ class _AccountPickerScreenState extends State<AccountPickerScreen> {
       try { 
         await _storageService.deleteAccount(email);
         if (mounted) {
+          // (★중요★)
+          // 삭제 후 AuthWrapper를 다시 로드하여 스토리지 상태를
+          // 재검사하도록 스택을 리셋합니다.
           Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(builder: (context) => const AuthWrapper()),
             (route) => false,
@@ -109,10 +112,11 @@ class _AccountPickerScreenState extends State<AccountPickerScreen> {
                       title: Text(email),
                       leading: const Icon(Icons.account_circle),
                       onTap: isAuthLoading ? null : () => _loginWithSavedAccount(email),
-                      // 삭제 버튼 비활성화
+                      // (★수정★) 6-2: 삭제 버튼 활성화
                       trailing: IconButton(
                         icon: const Icon(Icons.delete_outline, color: Colors.grey),
-                        onPressed: null, // ★비활성화★
+                        // ★★★ onPressed를 null에서 _deleteAccount 함수로 변경 ★★★
+                        onPressed: isAuthLoading ? null : () => _deleteAccount(email), 
                       ),
                     ),
                   );
@@ -126,8 +130,6 @@ class _AccountPickerScreenState extends State<AccountPickerScreen> {
               onPressed: isAuthLoading ? null : () { 
                 context.read<AuthService>().clearState();
                 
-                // (★수정★) 
-                // "뒤로가기" 버튼이 필요 없으므로 pushReplacement로 되돌립니다.
                 Navigator.of(context).pushReplacement(
                   MaterialPageRoute(builder: (context) => const LoginScreen()),
                 );
