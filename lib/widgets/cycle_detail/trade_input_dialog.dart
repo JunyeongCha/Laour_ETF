@@ -1,12 +1,26 @@
+// lib/widgets/cycle_detail/trade_input_dialog.dart (수정)
+
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; // 날짜 포맷을 위해 pubspec.yaml에 'intl' 추가 필요
+import 'package:intl/intl.dart';
 
 class TradeInputDialog extends StatefulWidget {
-  // 생성자가 아니라, static 함수로 팝업을 띄우고 결과를 반환하게 합니다.
-  static Future<Map<String, dynamic>?> show(BuildContext context) async {
+  // (★수정★)
+  // '준영매수법' 상세 화면에서 호출할 경우,
+  // 'isJunyeongMode' 플래그를 true로 전달받습니다.
+  final bool isJunyeongMode;
+
+  const TradeInputDialog({super.key, this.isJunyeongMode = false});
+
+  // static 함수로 팝업을 띄우고 결과를 반환
+  static Future<Map<String, dynamic>?> show(
+    BuildContext context, {
+    bool isJunyeongMode = false, // (★신규★)
+  }) async {
     return await showDialog<Map<String, dynamic>?>(
       context: context,
-      builder: (context) => TradeInputDialog(),
+      builder: (context) => TradeInputDialog(
+        isJunyeongMode: isJunyeongMode, // (★신규★)
+      ),
     );
   }
 
@@ -21,6 +35,20 @@ class _TradeInputDialogState extends State<TradeInputDialog> {
 
   DateTime _selectedDate = DateTime.now();
   String _tradeType = 'buy'; // 'buy' 또는 'sell'
+
+  // (★신규★) '준영매수법' 전용 상태 변수
+  // PDF(v3.0)  요구사항: 장기/단기 구분
+  // 기본값은 'long' (Track A)
+  String _trackType = 'long'; // 'long' (Track A) 또는 'short' (Track B)
+
+  @override
+  void initState() {
+    super.initState();
+    // '무매'(isJunyeongMode == false)일 때는 '장기'만 사용
+    if (!widget.isJunyeongMode) {
+      _trackType = 'long';
+    }
+  }
 
   // 날짜 선택기
   Future<void> _pickDate(BuildContext context) async {
@@ -49,6 +77,9 @@ class _TradeInputDialogState extends State<TradeInputDialog> {
         'price': price,
         'quantity': quantity,
         'type': _tradeType,
+        // (★신규★) PDF(v3.0) [cite: 138] 요구사항: 플래그 반환
+        // 'short' (Track B)이면 true, 'long' (Track A)이면 false
+        'isShortTerm': _trackType == 'short',
       });
     }
   }
@@ -62,6 +93,7 @@ class _TradeInputDialogState extends State<TradeInputDialog> {
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // 날짜 선택기
               Row(
@@ -74,11 +106,17 @@ class _TradeInputDialogState extends State<TradeInputDialog> {
                   ),
                 ],
               ),
+              const SizedBox(height: 16),
+
               // 매수/매도 선택
               SegmentedButton<String>(
                 segments: const [
-                  ButtonSegment(value: 'buy', label: Text('매수'), icon: Icon(Icons.add)),
-                  ButtonSegment(value: 'sell', label: Text('매도'), icon: Icon(Icons.remove)),
+                  ButtonSegment(
+                      value: 'buy', label: Text('매수'), icon: Icon(Icons.add)),
+                  ButtonSegment(
+                      value: 'sell',
+                      label: Text('매도'),
+                      icon: Icon(Icons.remove)),
                 ],
                 selected: {_tradeType},
                 onSelectionChanged: (Set<String> newSelection) {
@@ -87,13 +125,42 @@ class _TradeInputDialogState extends State<TradeInputDialog> {
                   });
                 },
               ),
+              const SizedBox(height: 16),
+
+              // (★신규★) '준영매수법'일 때만 장기/단기 선택기 표시
+              if (widget.isJunyeongMode) ...[
+                const Text('어느 지갑에 반영할까요? ',
+                    style: TextStyle(fontSize: 12)),
+                const SizedBox(height: 4),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(
+                        value: 'long',
+                        label: Text('장기 (Track A)'),
+                        icon: Icon(Icons.all_inclusive)),
+                    ButtonSegment(
+                        value: 'short',
+                        label: Text('단기 (Track B)'),
+                        icon: Icon(Icons.fast_forward)),
+                  ],
+                  selected: {_trackType},
+                  onSelectionChanged: (Set<String> newSelection) {
+                    setState(() {
+                      _trackType = newSelection.first;
+                    });
+                  },
+                ),
+                const SizedBox(height: 16),
+              ],
+
               TextFormField(
                 controller: _priceController,
                 decoration: const InputDecoration(labelText: '체결가 (원)'),
                 keyboardType: TextInputType.number,
                 validator: (value) {
                   if (value == null || value.isEmpty) return '가격을 입력하세요.';
-                  if (double.tryParse(value) == null || double.parse(value) <= 0) {
+                  if (double.tryParse(value) == null ||
+                      double.parse(value) <= 0) {
                     return '유효한 가격을 입력하세요.';
                   }
                   return null;

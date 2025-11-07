@@ -1,3 +1,4 @@
+
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -733,13 +734,21 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                 Text('거래 내역', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textColor)), 
                 TransactionList(
                   transactionStream: _transactionStream,
-                  onDelete: (transactionId, type, quantity, date, price) => _onDeleteTrade(
-                    transactionId, 
-                    type, 
-                    quantity,
-                    date,     
-                    price     
-                  ),
+                  isJunyeongMode: false, // (★수정★) "무매" 모드임을 명시
+                  
+                  // (★수정★) 6번째 isShortTerm 인자를 받도록 수정
+                  onDelete: (String transactionId, String type, int quantity, DateTime date, double price, bool isShortTerm) {
+                    
+                    // "무매"에서는 isShortTerm 인자를 무시하고 
+                    // 기존 _onDeleteTrade (5개 인자)를 호출합니다.
+                    _onDeleteTrade(
+                      transactionId, 
+                      type, 
+                      quantity,
+                      date,     
+                      price     
+                    );
+                  },
                 ),
 
                 if ((showSplitFinished || showTargetReached) && !isManuallyCompleted && currentQuantity > 0)

@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:laour_etf/screens/cycle_completed_screen.dart';
 import 'package:laour_etf/screens/cycle_detail_screen.dart';
+// (★신규★) 준영매수법 상세 화면 임포트
+import 'package:laour_etf/screens/junyeong_detail_screen.dart';
 import 'package:provider/provider.dart'; 
 import 'package:laour_etf/providers/theme_provider.dart'; 
 
@@ -10,7 +12,7 @@ class CycleCard extends StatelessWidget {
 
   const CycleCard({super.key, required this.cycleDoc});
 
-  // 삭제 로직
+  // (주석) 삭제 로직은 기존과 동일하므로 생략 (파일에는 포함됨)
   Future<void> _deleteCycle(BuildContext context) async {
     final bool confirmDelete = await showDialog(
       context: context,
@@ -40,7 +42,6 @@ class CycleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // (★수정★) 1번: 다크모드 텍스트 색상 처리를 위해
     final themeProvider = context.watch<ThemeProvider>();
     final bool isDarkMode = themeProvider.isDarkMode;
     final Color textColor = isDarkMode ? Colors.white : Colors.black;
@@ -52,10 +53,9 @@ class CycleCard extends StatelessWidget {
     final String nickname = data['nickname'] ?? '';
     final double avgPrice = (data['avgPrice'] as num?)?.toDouble() ?? 0.0;
     final int quantity = (data['currentQuantity'] as num?)?.toInt() ?? 0;
-    final double purchaseAmount = (data['currentPurchaseAmount'] as num?)?.toDouble() ?? 0.0; // "총 매수 금액"
+    final double purchaseAmount = (data['currentPurchaseAmount'] as num?)?.toDouble() ?? 0.0; 
     final double totalSeed = (data['totalSeed'] as num?)?.toDouble() ?? 1.0;
     
-    // (★신규★) 목표 수익률
     final double targetProfitRate = (data['targetProfitRate'] as num?)?.toDouble() ?? 0.0;
     
     final double realizedProfit = (data['realizedProfit'] as num?)?.toDouble() ?? 0.0;
@@ -65,6 +65,9 @@ class CycleCard extends StatelessWidget {
     
     final bool isManuallyCompleted = (data['isManuallyCompleted'] as bool?) ?? false;
     final bool isCompleted = isManuallyCompleted || (quantity == 0 && purchaseAmount > 0); 
+    
+    // (★신규★) 사이클 타입 식별 (기존 데이터는 'mumae'로 간주)
+    final String cycleType = data['type'] ?? 'mumae';
 
     double finalProfitAmount = 0.0;
     double finalProfitRate = 0.0;
@@ -83,6 +86,7 @@ class CycleCard extends StatelessWidget {
         key: Key(cycleDoc.id),
         direction: DismissDirection.endToStart,
         confirmDismiss: (direction) async {
+          // (주석) 삭제 확인 로직 (기존과 동일)
           final bool confirm = await showDialog(
             context: context,
             builder: (context) => AlertDialog(
@@ -118,7 +122,9 @@ class CycleCard extends StatelessWidget {
         ),
         child: InkWell(
           onTap: () {
+            // (★수정★) 'onTap' 분기 로직
             if (isCompleted) {
+              // 정산 완료 시: (기존과 동일)
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -126,12 +132,24 @@ class CycleCard extends StatelessWidget {
                 ),
               );
             } else {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => CycleDetailScreen(cycleId: cycleDoc.id),
-                ),
-              );
+              // 진행 중일 시: (★신규★) type에 따라 분기
+              if (cycleType == 'junyeong') {
+                // "준영" 사이클
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => JunyeongDetailScreen(cycleId: cycleDoc.id),
+                  ),
+                );
+              } else {
+                // "무매" 사이클 (기존)
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => CycleDetailScreen(cycleId: cycleDoc.id),
+                  ),
+                );
+              }
             }
           },
           child: Padding(
@@ -139,23 +157,43 @@ class CycleCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  name,
-                  style: TextStyle(
-                    fontSize: 18, 
-                    fontWeight: FontWeight.bold,
-                    color: textColor, // (★수정★) 1번
-                  ),
+                Row( // (★신규★) 이름 옆에 타입 배지 표시
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      name,
+                      style: TextStyle(
+                        fontSize: 18, 
+                        fontWeight: FontWeight.bold,
+                        color: textColor, 
+                      ),
+                    ),
+                    // (★신규★) 타입 배지
+                    if (cycleType == 'junyeong')
+                      Chip(
+                        label: const Text('준영'),
+                        backgroundColor: Colors.blue.shade100,
+                        labelStyle: TextStyle(color: Colors.blue.shade900, fontSize: 10),
+                        padding: const EdgeInsets.all(0),
+                      )
+                    else 
+                      Chip(
+                        label: const Text('무매'),
+                        backgroundColor: Colors.grey.shade200,
+                        labelStyle: TextStyle(color: Colors.grey.shade800, fontSize: 10),
+                        padding: const EdgeInsets.all(0),
+                      )
+                  ],
                 ),
                 if (nickname.isNotEmpty)
                   Text(
                     nickname, 
-                    style: TextStyle(color: subTextColor), // (★수정★) 1번
+                    style: TextStyle(color: subTextColor), 
                   ),
                 const SizedBox(height: 12),
                 
                 if (isCompleted)
-                  // "정산 완료" 시 UI
+                  // "정산 완료" 시 UI (기존과 동일)
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -167,8 +205,8 @@ class CycleCard extends StatelessWidget {
                       _buildInfoRow(
                         '총 매수 금액:', 
                         '${purchaseAmount.toStringAsFixed(0)} 원',
-                        textColor: textColor, // (★수정★) 1번
-                        subTextColor: subTextColor, // (★수정★) 1번
+                        textColor: textColor, 
+                        subTextColor: subTextColor, 
                       ),
                       _buildInfoRow(
                         '최종 실현 수익:',
@@ -187,7 +225,7 @@ class CycleCard extends StatelessWidget {
                     ],
                   )
                 else
-                  // "진행 중" 시 UI
+                  // "진행 중" 시 UI (기존과 동일)
                   Column(
                     children: [
                       Builder( 
@@ -202,11 +240,10 @@ class CycleCard extends StatelessWidget {
                             currentProfitColor = currentProfitLoss >= 0 ? Colors.red : Colors.blue.shade700;
                           }
                           
-                          // (★신규★) 목표 달성률 계산
                           double achievementRate = (targetProfitRate == 0 || currentProfitRate < 0) 
                               ? 0 
                               : (currentProfitRate / targetProfitRate);
-                          achievementRate = achievementRate.clamp(0.0, 1.0); // 0% ~ 100%
+                          achievementRate = achievementRate.clamp(0.0, 1.0); 
 
                           return Column(
                             children: [
@@ -237,8 +274,6 @@ class CycleCard extends StatelessWidget {
                                 subTextColor: subTextColor
                               ),
                               
-                              // (★신규★) 목표 수익률 표시
-                              // (★수정★) 1번: 목표 수익률 및 달성률 UI 변경
                               const Divider(height: 16),
                               _buildInfoRow(
                                 '목표 수익률:', 
@@ -246,16 +281,14 @@ class CycleCard extends StatelessWidget {
                                 textColor: textColor, 
                                 subTextColor: subTextColor
                               ),
-                              // (★신규★) 1번: 달성률 텍스트 Row
                               _buildInfoRow(
                                 '달성률:',
                                 '${(achievementRate * 100).toStringAsFixed(1)} %',
                                 textColor: textColor, 
                                 subTextColor: subTextColor
                               ),
-                              // (★신규★) 1번: 달성률 프로그레스 바
                               Padding(
-                                padding: const EdgeInsets.fromLTRB(0, 4, 0, 4), // 위아래 패딩 추가
+                                padding: const EdgeInsets.fromLTRB(0, 4, 0, 4), 
                                 child: LinearProgressIndicator(
                                   value: achievementRate,
                                   minHeight: 6,
@@ -278,7 +311,6 @@ class CycleCard extends StatelessWidget {
     );
   }
 
-  // (★수정★) 1번: 다크모드 색상을 받도록 헬퍼 수정
   Widget _buildInfoRow(String title, String value, {Color? valueColor, required Color textColor, required Color subTextColor}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,

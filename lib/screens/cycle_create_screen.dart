@@ -11,7 +11,7 @@ class CycleCreateScreen extends StatefulWidget {
 
 class _CycleCreateScreenState extends State<CycleCreateScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
+  // final _nameController = TextEditingController(); // (★제거★)
   final _nicknameController = TextEditingController();
   final _totalSeedController = TextEditingController();
   final _splitCountController = TextEditingController();
@@ -20,6 +20,10 @@ class _CycleCreateScreenState extends State<CycleCreateScreen> {
   final _starValueController = TextEditingController(); 
 
   bool _isLoading = false;
+
+  // (★신규★) "무매" 타입 전용 종목 리스트
+  final List<String> _mumaeItems = ['TQQQ', 'SOXL'];
+  String? _selectedMumaeItem; // (★신규★)
 
   Future<void> _createCycle() async {
     if (!_formKey.currentState!.validate()) {
@@ -40,7 +44,7 @@ class _CycleCreateScreenState extends State<CycleCreateScreen> {
       final double starValue = double.tryParse(_starValueController.text) ?? 0.0; 
 
       final Map<String, dynamic> cycleData = {
-        'name': _nameController.text.trim(),
+        'name': _selectedMumaeItem!, // (★수정★) 
         'nickname': _nicknameController.text.trim(),
         'totalSeed': totalSeed,
         'splitCount': splitCount,
@@ -48,14 +52,17 @@ class _CycleCreateScreenState extends State<CycleCreateScreen> {
         'createdAt': Timestamp.now(),
         
         'currentPrice': currentPrice, 
-        'starValue': starValue, // (★수정★) 4번: 이 값은 3배수 Star 값으로 저장됨
+        'starValue': starValue, 
+        
+        // (★신규★) "무매" 타입 식별자 추가
+        'type': 'mumae',
         
         // 초기화 필드
         'currentPurchaseAmount': 0.0,
         'totalSellAmount': 0.0,
         'currentQuantity': 0,
         'avgPrice': 0.0,
-        'T_value': 0, // (T_value는 재계산 시 int로 계산됨, 이전 코드 유지)
+        'T_value': 0, 
         'realizedProfit': 0.0, 
         'isManuallyCompleted': false,
       };
@@ -85,7 +92,7 @@ class _CycleCreateScreenState extends State<CycleCreateScreen> {
 
   @override
   void dispose() {
-    _nameController.dispose();
+    // _nameController.dispose(); // (★제거★)
     _nicknameController.dispose();
     _totalSeedController.dispose();
     _splitCountController.dispose();
@@ -99,7 +106,7 @@ class _CycleCreateScreenState extends State<CycleCreateScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('새 사이클 생성'),
+        title: const Text('새 사이클 생성 (무매)'), // (★수정★)
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -107,12 +114,24 @@ class _CycleCreateScreenState extends State<CycleCreateScreen> {
           key: _formKey,
           child: ListView(
             children: [
-              TextFormField(
-                controller: _nameController,
-                decoration: const InputDecoration(labelText: '이름 (예: TIGER 나스닥100)'),
+              // (★수정★) 텍스트 입력 대신 드롭다운으로 변경
+              DropdownButtonFormField<String>(
+                value: _selectedMumaeItem,
+                decoration: const InputDecoration(labelText: '종목 (무매)'),
+                items: _mumaeItems.map((String item) {
+                  return DropdownMenuItem<String>(
+                    value: item,
+                    child: Text(item),
+                  );
+                }).toList(),
+                onChanged: (String? newValue) {
+                  setState(() {
+                    _selectedMumaeItem = newValue;
+                  });
+                },
                 validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return '이름을 입력하세요.';
+                  if (value == null || value.isEmpty) {
+                    return '종목을 선택하세요.';
                   }
                   return null;
                 },
@@ -140,7 +159,6 @@ class _CycleCreateScreenState extends State<CycleCreateScreen> {
               
               TextFormField(
                 controller: _starValueController,
-                // (★수정★) 4번: 라벨 변경
                 decoration: const InputDecoration(
                   labelText: '초기 3배수 Star 값 (%) (필수)',
                   helperText: '예: TQQQ 3배수 Star 값 입력 시, 2배수 ETF 공식에 맞게 자동 변환됩니다.',
