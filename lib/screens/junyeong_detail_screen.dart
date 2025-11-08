@@ -59,8 +59,13 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
 
     _cycleStream = _cycleRef.snapshots();
     // (★수정★) isShortTerm 필드를 기준으로 정렬 (장기 -> 단기 순)
+    // (★버그 수정★)
+    // orderBy를 2개 필드(isShortTerm, date)에 사용하면
+    // Firestore "복합 색인"이 필요합니다.
+    // 색인 생성 없이 즉시 동작하도록, date 기준으로만 정렬합니다.
+    // (TransactionList가 (장기 A)/(단기 B) 태그를 표시하므로
+    //  날짜 정렬만으로도 충분합니다.)
     _transactionStream = _transactionsRef
-        .orderBy('isShortTerm', descending: false)
         .orderBy('date', descending: true)
         .snapshots();
 
@@ -446,8 +451,11 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
       final WriteBatch batch = FirebaseFirestore.instance.batch();
 
       for (var doc in shortTermTrades.docs) {
-        // 3. 'isShortTerm' 플래그를 false (장기)로 변경
-        batch.update(doc.reference, {'isShortTerm': false});
+        // 3. 'isShortTerm' 플래그를 false (장기)로 변경하고, "롤오버" 깃발을 추가
+        batch.update(doc.reference, {
+          'isShortTerm': false,
+          'wasRolledOver': true, // <-- "롤오버 되었음" 깃발(Tag) 추가
+        });
       }
 
       // 4. 일괄 작업 실행

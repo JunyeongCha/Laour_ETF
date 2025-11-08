@@ -1,4 +1,4 @@
-// lib/widgets/cycle_detail/transaction_list.dart (★수정 완료★)
+// lib/widgets/cycle_detail/transaction_list.dart (★"롤오버 메시지" 추가★)
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -7,18 +7,16 @@ import 'package:intl/intl.dart';
 class TransactionList extends StatelessWidget {
   final Stream<QuerySnapshot> transactionStream;
   
-  // (★수정★) "준영매수법"인지 확인하는 플래그
   final bool isJunyeongMode; 
 
-  // (★수정★) onDelete 콜백의 시그니처를 6개 인자(bool isShortTerm)로 변경
   final Function(String transactionId, String type, int quantity, DateTime date,
-      double price, bool isShortTerm) onDelete; //
+      double price, bool isShortTerm) onDelete; 
 
   const TransactionList({
     super.key,
     required this.transactionStream,
     required this.onDelete,
-    this.isJunyeongMode = false, // (★신규★) 기본값은 false
+    this.isJunyeongMode = false, 
   });
 
   @override
@@ -37,8 +35,8 @@ class TransactionList extends StatelessWidget {
 
         return ListView.builder(
           itemCount: transactions.length,
-          shrinkWrap: true, // ScrollView 안에 있으므로
-          physics: const NeverScrollableScrollPhysics(), // ScrollView 안에 있으므로
+          shrinkWrap: true, 
+          physics: const NeverScrollableScrollPhysics(), 
           itemBuilder: (context, index) {
             final doc = transactions[index];
             final data = doc.data() as Map<String, dynamic>;
@@ -50,24 +48,48 @@ class TransactionList extends StatelessWidget {
             final double price = (data['price'] as num).toDouble();
             final int quantity = (data['quantity'] as num).toInt();
             
-            // (★신규★) isShortTerm 값 읽기
             final bool isShortTerm = (data['isShortTerm'] as bool?) ?? false;
+            
+            // (★신규★) 롤오버 깃발(Tag) 읽기
+            final bool wasRolledOver = (data['wasRolledOver'] as bool?) ?? false;
 
-            // (★신규★) "준영매수법"일 때만 태그 표시
             String title = '${DateFormat('yyyy-MM-dd').format(date)} - $type';
             if (isJunyeongMode) {
-              title += isShortTerm ? ' (단기 B)' : ' (장기 A)';
+              // (★수정★) 롤오버 깃발이 true이면, (장기 A) 태그 강제
+              title += (isShortTerm && !wasRolledOver) ? ' (단기 B)' : ' (장기 A)';
             }
 
             return Card(
               margin: const EdgeInsets.symmetric(vertical: 4.0),
               child: ListTile(
                 title: Text(
-                  title, // (★수정★)
+                  title, 
                   style:
                       TextStyle(color: typeColor, fontWeight: FontWeight.bold),
                 ),
-                subtitle: Text('${price.toStringAsFixed(0)}원 X $quantity주'),
+                
+                // (★수정★) Subtitle을 Column으로 변경
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${price.toStringAsFixed(0)}원 X $quantity주'),
+                    
+                    // (★신규★) 롤오버 메시지 표시
+                    if (wasRolledOver)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2.0),
+                        child: Text(
+                          "└ (단기 B -> 장기 A 롤오버됨)",
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.green.shade700,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+
                 trailing: IconButton(
                   icon: const Icon(Icons.close),
                   color: Colors.grey,
@@ -92,7 +114,9 @@ class TransactionList extends StatelessWidget {
                         false;
 
                     if (confirmDelete) {
-                      // (★수정★) 6개 인자(isShortTerm)를 모두 전달
+                      // (★수정 없음★)
+                      // 삭제 로직은 현재 상태(isShortTerm)를 기반으로 하므로
+                      // 롤오버 여부와 관계없이 정확하게 동작합니다.
                       onDelete(doc.id, data['type'], quantity, date, price,
                           isShortTerm);
                     }
