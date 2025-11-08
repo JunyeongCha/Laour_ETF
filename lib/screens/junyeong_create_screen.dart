@@ -1,4 +1,4 @@
-// // lib/screens/junyeong_create_screen.dart (수정)
+// // lib/screens/junyeong_create_screen.dart (★2-2단계: k-Factor 확장 완료★)
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -21,17 +21,17 @@ class _JunyeongCreateScreenState extends State<JunyeongCreateScreen> {
   final _currentPriceController = TextEditingController();
 
   final _usMarketRateController = TextEditingController();
-  // (★신규★) "무매"와 동일하게 Star 값 컨트롤러 추가
   final _starValueController = TextEditingController();
 
   bool _isLoading = false;
 
+  // (★2-2단계 수정★) ACE, PLUS 종목 추가
   final List<String> _junyeongItems = [
     'TIGER 미국필라델피아반도체레버리지',
     'KODEX 미국나스닥100레버리지',
     'PLUS 미국테크TOP10레버리지',
     'ACE 미국빅테크TOP7 PLUS레버리지'
-  ]; // (★종목명 현실화★)
+  ];
   String? _selectedJunyeongItem;
 
   Future<void> _createCycle() async {
@@ -58,22 +58,28 @@ class _JunyeongCreateScreenState extends State<JunyeongCreateScreen> {
 
       final double initialUsMarketRate =
           double.tryParse(_usMarketRateController.text) ?? 0.0;
-      // (★신규★) Star 값 읽기
       final double starValue =
           double.tryParse(_starValueController.text) ?? 0.0;
 
-      // (★신규★) 준영매수법 PDF(v3.0) 요구사항: k-Factor 자동 할당
+      // (★2-2단계 수정★) k-Factor 할당 로직 확장
       double kMin, kMax, kAvg;
       if (_selectedJunyeongItem == 'TIGER 미국필라델피아반도체레버리지') {
-        kMin = 2.68; // [cite: 153]
-        kMax = 3.69; // [cite: 153]
-        kAvg = 3.185; // [cite: 155]
+        kMin = 2.68; // [cite: 21]
+        kMax = 3.69; // [cite: 21]
+        kAvg = 3.185; // [cite: 23]
       } else if (_selectedJunyeongItem == 'KODEX 미국나스닥100레버리지') {
-        kMin = 3.47; // [cite: 154]
-        kMax = 3.53; // [cite: 154]
-        kAvg = 3.50; // [cite: 156]
+        kMin = 3.47; // [cite: 22]
+        kMax = 3.53; // [cite: 22]
+        kAvg = 3.50; // 
+      } else if (_selectedJunyeongItem == 'PLUS 미국테크TOP10레버리지' ||
+                 _selectedJunyeongItem == 'ACE 미국빅테크TOP7 PLUS레버리지') {
+        // (★2-2단계★) 요청사항: ACE와 PLUS는 KODEX 값을 임시로 사용
+        // TODO: 6단계에서 이 종목들의 k-Factor 확정 필요
+        kMin = 3.47; 
+        kMax = 3.53; 
+        kAvg = 3.50; 
       } else {
-        // (임시) TIGER 필반 값 사용
+        // (임시) TIGER 필반 값 사용 (위 리스트 외의 값이 들어올 경우 대비)
         kMin = 2.68;
         kMax = 3.69;
         kAvg = 3.185;
@@ -93,15 +99,13 @@ class _JunyeongCreateScreenState extends State<JunyeongCreateScreen> {
 
         'usMarketRate': initialUsMarketRate,
 
-        // (★신규★) "무매"와 동일하게 Star 값 저장
-        'starValue': starValue, // [cite: 148]
+        'starValue': starValue, 
 
-        // (★신규★) k-Factors 저장 [cite: 151]
         'kMin': kMin,
         'kMax': kMax,
         'kAvg': kAvg,
 
-        // (★신규★) "준영매수법" Track A/B를 위한 듀얼 지갑 초기화 [cite: 239, 246, 247]
+        // "준영매수법" Track A/B를 위한 듀얼 지갑 초기화
         // 1. 장기(Track A) 지갑
         'currentPurchaseAmount_A': 0.0,
         'totalSellAmount_A': 0.0,
@@ -117,11 +121,10 @@ class _JunyeongCreateScreenState extends State<JunyeongCreateScreen> {
         'realizedProfit_B': 0.0,
 
         // 3. 기존(공통) 집계 변수 (T값, 정산완료 플래그)
-        'T_value': 0, // T값은 공통(날짜 기준)
+        'T_value': 0, 
         'isManuallyCompleted': false,
 
-        // (★신규★) "준영매수법" Track B의 '어제 종가' [cite: 146]
-        'previousClosePrice': 0.0, // 상세 화면에서 입력받아 저장
+        'previousClosePrice': 0.0, 
       };
 
       await FirebaseFirestore.instance
@@ -155,7 +158,7 @@ class _JunyeongCreateScreenState extends State<JunyeongCreateScreen> {
     _targetProfitRateController.dispose();
     _currentPriceController.dispose();
     _usMarketRateController.dispose();
-    _starValueController.dispose(); // (★신규★)
+    _starValueController.dispose(); 
     super.dispose();
   }
 
@@ -177,6 +180,7 @@ class _JunyeongCreateScreenState extends State<JunyeongCreateScreen> {
                 items: _junyeongItems.map((String item) {
                   return DropdownMenuItem<String>(
                     value: item,
+                    // (★2-2단계 수정★) 긴 이름이 잘리지 않도록 ellipsis 처리
                     child: Text(item, overflow: TextOverflow.ellipsis),
                   );
                 }).toList(),
@@ -232,7 +236,6 @@ class _JunyeongCreateScreenState extends State<JunyeongCreateScreen> {
               ),
               const SizedBox(height: 16),
 
-              // (★신규★) "무매"와 동일하게 Star 값 입력 필드 추가
               TextFormField(
                 controller: _starValueController,
                 decoration: const InputDecoration(
