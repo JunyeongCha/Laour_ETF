@@ -1,14 +1,14 @@
-// // lib/screens/my_page_screen.dart (수정)
+// // lib/screens/my_page_screen.dart (★수정 완료★)
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:laour_etf/auth/auth_service.dart'; 
+import 'package:laour_etf/auth/auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:laour_etf/providers/theme_provider.dart';
 import 'package:laour_etf/screens/target_setting_screen.dart';
-import 'package:laour_etf/screens/name_change_screen.dart'; 
-import 'package:laour_etf/screens/password_change_screen.dart'; // (★신규★)
+import 'package:laour_etf/screens/name_change_screen.dart';
+import 'package:laour_etf/screens/password_change_screen.dart';
 
 class MyPageScreen extends StatelessWidget {
   const MyPageScreen({super.key});
@@ -20,17 +20,18 @@ class MyPageScreen extends StatelessWidget {
 
     // 1. 유저 정보(목표 금액, 이름) 스트림
     final Stream<DocumentSnapshot>? userDocStream = (user != null)
-      ? FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots()
-      : null;
-      
+        ? FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots()
+        : null;
+
     // 2. 사이클(누적 수익) 스트림
-    final Stream<QuerySnapshot>? completedCyclesStream = (user != null)
-      ? FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('cycles')
-          .snapshots() 
-      : null;
+    // (★수정★) 마이페이지는 탭 구분이 없으므로 '모든' 사이클을 불러옵니다.
+    final Stream<QuerySnapshot>? allCyclesStream = (user != null)
+        ? FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .collection('cycles')
+            .snapshots()
+        : null;
 
     return Scaffold(
       appBar: AppBar(
@@ -56,24 +57,24 @@ class MyPageScreen extends StatelessWidget {
                     user?.email ?? '로그인 정보 없음',
                   ),
                 ),
-                
                 StreamBuilder<DocumentSnapshot>(
                   stream: userDocStream,
                   builder: (context, userSnapshot) {
-                    
                     String currentName = '...';
                     double targetProfit = 0.0;
-                    
-                    if (userSnapshot.connectionState == ConnectionState.active && 
-                        userSnapshot.hasData && 
+
+                    if (userSnapshot.connectionState == ConnectionState.active &&
+                        userSnapshot.hasData &&
                         userSnapshot.data!.exists) {
-                       final userData = userSnapshot.data!.data() as Map<String, dynamic>;
-                       currentName = userData['name'] ?? '이름 없음'; 
-                       targetProfit = (userData['targetProfit'] as num?)?.toDouble() ?? 0.0;
+                      final userData =
+                          userSnapshot.data!.data() as Map<String, dynamic>;
+                      currentName = userData['name'] ?? '이름 없음';
+                      targetProfit =
+                          (userData['targetProfit'] as num?)?.toDouble() ?? 0.0;
                     }
 
                     return Column(
-                      children: [ 
+                      children: [
                         ListTile(
                           leading: const Icon(Icons.person_outline),
                           title: const Text('이름'),
@@ -82,13 +83,15 @@ class MyPageScreen extends StatelessWidget {
                           onTap: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (context) => const NameChangeScreen()),
+                              MaterialPageRoute(
+                                  builder: (context) => const NameChangeScreen()),
                             );
                           },
-                        ), 
+                        ),
 
+                        // (★핵심 수정★) "누적 총수익" 계산기
                         StreamBuilder<QuerySnapshot>(
-                          stream: completedCyclesStream,
+                          stream: allCyclesStream, // (★수정★)
                           builder: (context, cycleSnapshot) {
                             if (!cycleSnapshot.hasData || user == null) {
                               return const ListTile(
@@ -99,37 +102,70 @@ class MyPageScreen extends StatelessWidget {
                             }
 
                             double totalRealizedProfit = 0.0;
-                            
+
                             for (var doc in cycleSnapshot.data!.docs) {
                               final data = doc.data() as Map<String, dynamic>?;
                               if (data == null) continue;
+
+                              // (★핵심 수정★) 1. 사이클 타입 식별
+                              final String cycleType = data['type'] ?? 'mumae';
+
+                              // (★핵심 수정★) 2. 정산 완료 여부 판별
+                              //    "준영"은 A/B 수량을 합산해서 0인지 봐야 함
+                              int quantity = 0;
+                              double purchaseAmount = 0.0;
+
+                              if (cycleType == 'junyeong') {
+                                quantity =
+                                    ((data['currentQuantity_A'] as num?)?.toInt() ?? 0) +
+                                    ((data['currentQuantity_B'] as num?)?.toInt() ?? 0);
+                                purchaseAmount =
+                                    ((data['currentPurchaseAmount_A'] as num?)?.toDouble() ?? 0.0) +
+                                    ((data['currentPurchaseAmount_B'] as num?)?.toDouble() ?? 0.0);
+                              } else {
+                                // "무매"
+                                quantity = (data['currentQuantity'] as num?)?.toInt() ?? 0;
+                                purchaseAmount = (data['currentPurchaseAmount'] as num?)?.toDouble() ?? 0.0;
+                              }
                               
-                              final int quantity = (data['currentQuantity'] as num?)?.toInt() ?? 0;
-                              final double purchaseAmount = (data['currentPurchaseAmount'] as num?)?.toDouble() ?? 0.0;
                               final bool isManuallyCompleted = (data['isManuallyCompleted'] as bool?) ?? false;
 
+                              // (★핵심 수정★) 3. 정산 완료된 사이클이면 수익 합산
                               if (isManuallyCompleted || (quantity == 0 && purchaseAmount > 0)) {
-                                totalRealizedProfit += (data['realizedProfit'] as num?)?.toDouble() ?? 0.0;
+                                if (cycleType == 'junyeong') {
+                                  // "준영"은 A/B 수익 합산
+                                  totalRealizedProfit +=
+                                      ((data['realizedProfit_A'] as num?)?.toDouble() ?? 0.0) +
+                                      ((data['realizedProfit_B'] as num?)?.toDouble() ?? 0.0);
+                                } else {
+                                  // "무매"는 기존 수익 합산
+                                  totalRealizedProfit += (data['realizedProfit'] as num?)?.toDouble() ?? 0.0;
+                                }
                               }
-                            }
-                            
-                            final Color profitColor = totalRealizedProfit >= 0 ? Colors.red : Colors.blue.shade700;
-                            
+                            } // (end for loop)
+
+                            final Color profitColor = totalRealizedProfit >= 0
+                                ? Colors.red
+                                : Colors.blue.shade700;
+
                             double achievementRate = 0.0;
                             if (targetProfit > 0) {
-                              achievementRate = totalRealizedProfit / targetProfit;
+                              achievementRate =
+                                  totalRealizedProfit / targetProfit;
                             }
-                            achievementRate = achievementRate.clamp(0.0, 1.0); 
+                            achievementRate =
+                                achievementRate.clamp(0.0, 1.0);
 
                             return Column(
                               children: [
                                 ListTile(
-                                  leading: Icon(Icons.assessment_outlined, color: profitColor),
+                                  leading: Icon(Icons.assessment_outlined,
+                                      color: profitColor),
                                   title: const Text('누적 총 수익'),
                                   subtitle: Text(
                                     '${totalRealizedProfit.toStringAsFixed(0)} 원',
                                     style: TextStyle(
-                                      color: profitColor, 
+                                      color: profitColor,
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16,
                                     ),
@@ -137,16 +173,20 @@ class MyPageScreen extends StatelessWidget {
                                 ),
                                 // 목표 달성률 UI
                                 Padding(
-                                  padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 16.0),
+                                  padding: const EdgeInsets.fromLTRB(
+                                      16.0, 0, 16.0, 16.0),
                                   child: Column(
                                     children: [
                                       Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
                                         children: [
-                                          const Text('목표 달성률', style: TextStyle(fontSize: 14)),
+                                          const Text('목표 달성률',
+                                              style: TextStyle(fontSize: 14)),
                                           Text(
                                             '${(achievementRate * 100).toStringAsFixed(1)} %',
-                                            style: const TextStyle(fontWeight: FontWeight.bold),
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.bold),
                                           ),
                                         ],
                                       ),
@@ -163,7 +203,9 @@ class MyPageScreen extends StatelessWidget {
                                         alignment: Alignment.centerRight,
                                         child: Text(
                                           '목표: ${targetProfit.toStringAsFixed(0)} 원',
-                                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey.shade600),
                                         ),
                                       )
                                     ],
@@ -172,11 +214,11 @@ class MyPageScreen extends StatelessWidget {
                               ],
                             );
                           },
-                        ), 
-                      ], 
-                    ); 
-                  }, 
-                ), 
+                        ),
+                      ],
+                    );
+                  },
+                ),
               ],
             ),
           ),
@@ -195,12 +237,11 @@ class MyPageScreen extends StatelessWidget {
                 SwitchListTile(
                   secondary: const Icon(Icons.dark_mode_outlined),
                   title: const Text('다크 모드'),
-                  value: themeProvider.isDarkMode, 
+                  value: themeProvider.isDarkMode,
                   onChanged: (bool value) {
                     context.read<ThemeProvider>().toggleTheme(value);
                   },
                 ),
-                
                 ListTile(
                   leading: const Icon(Icons.flag_outlined),
                   title: const Text('목표 금액 설정'),
@@ -208,26 +249,27 @@ class MyPageScreen extends StatelessWidget {
                   onTap: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => const TargetSettingScreen()),
+                      MaterialPageRoute(
+                          builder: (context) => const TargetSettingScreen()),
                     );
                   },
                 ),
-
                 ListTile(
                   leading: const Icon(Icons.lock_outline),
                   title: const Text('비밀번호 변경'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
-                    // (★신규★) 비밀번호 변경 화면으로 이동
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => const PasswordChangeScreen()),
+                      MaterialPageRoute(
+                          builder: (context) => const PasswordChangeScreen()),
                     );
                   },
                 ),
                 ListTile(
                   leading: Icon(Icons.logout, color: Colors.red.shade700),
-                  title: Text('로그아웃', style: TextStyle(color: Colors.red.shade700)),
+                  title:
+                      Text('로그아웃', style: TextStyle(color: Colors.red.shade700)),
                   onTap: () {
                     context.read<AuthService>().signOut();
                     Navigator.of(context).popUntil((route) => route.isFirst);

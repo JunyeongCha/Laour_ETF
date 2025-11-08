@@ -1,7 +1,9 @@
+// lib/widgets/ongoing_status_card.dart (★수정 완료★)
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:provider/provider.dart'; // (★신규★)
-import 'package:laour_etf/providers/theme_provider.dart'; // (★신규★)
+import 'package:provider/provider.dart';
+import 'package:laour_etf/providers/theme_provider.dart';
 
 class OngoingStatusCard extends StatelessWidget {
   final List<QueryDocumentSnapshot> cycleDocs;
@@ -10,11 +12,9 @@ class OngoingStatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // (★신규★) 현재 테마 모드를 가져옴
     final themeProvider = context.watch<ThemeProvider>();
     final bool isDarkMode = themeProvider.isDarkMode;
 
-    // --- (★복구★) 5-2의 원본 계산 로직 시작 ---
     double totalSeed = 0;
     double totalPurchaseAmount = 0;
     double totalOngoingProfit = 0.0;
@@ -23,16 +23,45 @@ class OngoingStatusCard extends StatelessWidget {
       final data = doc.data() as Map<String, dynamic>?;
       if (data == null) continue;
 
+      // (★핵심 수정★) 1. 사이클 타입 식별
+      final String cycleType = data['type'] ?? 'mumae';
+
+      // (★핵심 수정★) 2. 타입에 따라 분기
       totalSeed += (data['totalSeed'] as num?)?.toDouble() ?? 0.0;
-      totalPurchaseAmount += (data['currentPurchaseAmount'] as num?)?.toDouble() ?? 0.0;
+      
+      final double currentPrice = (data['currentPrice'] as num?)?.toDouble() ?? 0.0;
 
-      final int currentQuantity = (data['currentQuantity'] as num?)?.toInt() ?? 0;
-      if (currentQuantity > 0) {
-        final double avgPrice = (data['avgPrice'] as num?)?.toDouble() ?? 0.0;
-        final double currentPrice = (data['currentPrice'] as num?)?.toDouble() ?? 0.0; 
+      if (cycleType == 'junyeong') {
+        // "준영" 사이클: A/B 데이터 합산
+        final double purchaseAmount_A = (data['currentPurchaseAmount_A'] as num?)?.toDouble() ?? 0.0;
+        final double purchaseAmount_B = (data['currentPurchaseAmount_B'] as num?)?.toDouble() ?? 0.0;
+        totalPurchaseAmount += purchaseAmount_A + purchaseAmount_B;
+        
+        // A지갑 평가 손익
+        final double avgPrice_A = (data['avgPrice_A'] as num?)?.toDouble() ?? 0.0;
+        final int quantity_A = (data['currentQuantity_A'] as num?)?.toInt() ?? 0;
+        if (avgPrice_A > 0 && currentPrice > 0 && quantity_A > 0) {
+          totalOngoingProfit += (currentPrice - avgPrice_A) * quantity_A;
+        }
+        
+        // B지갑 평가 손익
+        final double avgPrice_B = (data['avgPrice_B'] as num?)?.toDouble() ?? 0.0;
+        final int quantity_B = (data['currentQuantity_B'] as num?)?.toInt() ?? 0;
+        if (avgPrice_B > 0 && currentPrice > 0 && quantity_B > 0) {
+          totalOngoingProfit += (currentPrice - avgPrice_B) * quantity_B;
+        }
 
-        if (avgPrice > 0 && currentPrice > 0) {
-          totalOngoingProfit += (currentPrice - avgPrice) * currentQuantity;
+      } else {
+        // "무매" 사이클: 기존 데이터 사용
+        final double purchaseAmount = (data['currentPurchaseAmount'] as num?)?.toDouble() ?? 0.0;
+        totalPurchaseAmount += purchaseAmount;
+
+        final int currentQuantity = (data['currentQuantity'] as num?)?.toInt() ?? 0;
+        if (currentQuantity > 0) {
+          final double avgPrice = (data['avgPrice'] as num?)?.toDouble() ?? 0.0;
+          if (avgPrice > 0 && currentPrice > 0) {
+            totalOngoingProfit += (currentPrice - avgPrice) * currentQuantity;
+          }
         }
       }
     }
@@ -45,19 +74,16 @@ class OngoingStatusCard extends StatelessWidget {
         : (totalOngoingProfit / totalPurchaseAmount) * 100;
     
     final Color profitColor = totalOngoingProfit >= 0 ? Colors.red : Colors.blue.shade700;
-    // --- (★복구★) 5-2의 원본 계산 로직 끝 ---
 
-
-    // (★신규★) 다크 모드에 따른 배경 및 글씨 색상 조정
-    final Color cardBackgroundColor = isDarkMode ? Colors.grey[900]! : Colors.blue.shade50; // 원본 민트색
+    // --- (UI 수정) ---
+    final Color cardBackgroundColor = isDarkMode ? Colors.grey[900]! : Colors.blue.shade50; 
     final Color textColor = isDarkMode ? Colors.white : Colors.black;
-    final Color subTextColor = isDarkMode ? Colors.white70 : Colors.grey.shade700; // 원본 회색
-    final Color borderColor = isDarkMode ? Colors.white.withOpacity(0.5) : Colors.transparent; // 테두리 색상
+    final Color subTextColor = isDarkMode ? Colors.white70 : Colors.grey.shade700;
+    final Color borderColor = isDarkMode ? Colors.white.withOpacity(0.5) : Colors.transparent; 
 
     return Card(
-      color: cardBackgroundColor, // (★수정★)
+      color: cardBackgroundColor,
       elevation: 2.0,
-      // (★신규★) 테두리 추가
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(color: borderColor, width: isDarkMode ? 1.0 : 0.0),
@@ -66,7 +92,6 @@ class OngoingStatusCard extends StatelessWidget {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            // (★복구★) 5-2의 원본 UI 항목들
             _buildStatusRow(
               '진행중 시드', 
               '${totalSeed.toStringAsFixed(0)} 원',
@@ -106,11 +131,11 @@ class OngoingStatusCard extends StatelessWidget {
               children: [
                 Text(
                   '진행중 시드 소진율:',
-                  style: TextStyle(color: subTextColor), // (★수정★)
+                  style: TextStyle(color: subTextColor),
                 ),
                 Text(
                   '${seedUsagePercent.toStringAsFixed(1)} %', 
-                  style: TextStyle(fontWeight: FontWeight.bold, color: textColor) // (★수정★)
+                  style: TextStyle(fontWeight: FontWeight.bold, color: textColor)
                 ),
               ],
             ),
@@ -126,20 +151,19 @@ class OngoingStatusCard extends StatelessWidget {
     );
   }
 
-  // (★수정★) 헬퍼 함수가 다크모드 텍스트 색상을 받도록 수정
   Widget _buildStatusRow(String title, String value, {Color? valueColor, required Color textColor, required Color subTextColor}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: TextStyle(color: subTextColor)), // (★수정★)
+          Text(title, style: TextStyle(color: subTextColor)),
           Text(
             value, 
             style: TextStyle(
               fontWeight: FontWeight.bold, 
               fontSize: 16,
-              color: valueColor ?? textColor, // (★수정★)
+              color: valueColor ?? textColor,
             ),
           ),
         ],
