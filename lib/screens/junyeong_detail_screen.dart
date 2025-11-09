@@ -42,7 +42,6 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
   final _totalSeedEditController = TextEditingController();
 
   bool _isRecalculating = false;
-  double _savedPrice = 0.0;
 
   @override
   void initState() {
@@ -82,7 +81,6 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
 
         final double price = (data['currentPrice'] as num?)?.toDouble() ?? 0.0;
         _currentPriceController.text = price.toString();
-        _savedPrice = price;
 
         _previousClosePriceController.text =
             (data['previousClosePrice'] as num?)?.toString() ?? '0.0';
@@ -307,7 +305,6 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
 
       if (mounted) {
         _currentPriceController.text = newPrice.toString();
-        _savedPrice = newPrice;
       }
 
       await _cycleRef.update({'currentPrice': newPrice});
@@ -397,7 +394,6 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
       });
 
       if (mounted) {
-        _savedPrice = price;
         FocusManager.instance.primaryFocus?.unfocus();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -698,20 +694,40 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
             double.tryParse(_starValueController.text) ?? 0.0; // 3배수 Star
 
         // (E. Track A: "무매" 공식 계산)
-        final double starValue = (starValue_3x * 2) / 3.0; // 2배수 변환
+        // (★3단계-1★) Star 값 계산 (kAvg 적용)
+        final double starValue = (kAvg == 0) ? 0 : (starValue_3x / kAvg);
+
         final bool isFirstBuy_A = (avgPrice_A == 0 && currentQuantity_A == 0);
         final double displayAvgPrice_A =
             isFirstBuy_A ? currentPrice : avgPrice_A;
 
         final double calcBuyPrice_A =
             displayAvgPrice_A * (1 + (starValue / 100));
-        final double oneTimeSplitAmount = oneTimeInvestment / 2;
+
+        // (★3단계-2★) 1회 투자금 총액 5-Tier 동적 조절
+        double totalDailyInvestment = oneTimeInvestment; // 1.0배 (기본)
+        if (x < -4.5) {
+          totalDailyInvestment = oneTimeInvestment * 2.0; // 2.0배
+        } else if (x < -1.5) {
+          totalDailyInvestment = oneTimeInvestment * 1.5; // 1.5배
+        } else if (x <= 1.5) {
+          totalDailyInvestment = oneTimeInvestment * 1.0; // 1.0배 (보합)
+        } else if (x <= 4.5) {
+          totalDailyInvestment = oneTimeInvestment * 0.75; // 0.75배
+        } else { // x > 4.5
+          totalDailyInvestment = oneTimeInvestment * 0.4; // 0.4배
+        }
+
+        // (★3단계-2★) 50:50 비중 분배
+        final double avgBuyAmount = totalDailyInvestment * 0.5;
+        final double starBuyAmount = totalDailyInvestment * 0.5;
+
         final double buyQtyAtAvg_A = (displayAvgPrice_A == 0)
             ? 0
-            : (oneTimeSplitAmount / displayAvgPrice_A);
+            : (avgBuyAmount / displayAvgPrice_A);
         final double buyQtyAtStar_A = (calcBuyPrice_A == 0)
             ? 0
-            : (oneTimeSplitAmount / calcBuyPrice_A);
+            : (starBuyAmount / calcBuyPrice_A);
 
         final double sellPrice1_A = calcBuyPrice_A + 1;
         final double sellQty1_A = currentQuantity_A / 4.0;
@@ -821,6 +837,16 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
         achievementRate = achievementRate.clamp(0.0, 1.0); // 0% ~ 100%
 
         // (I. 알림 메시지 - Track A 기준)
+        // (★3단계-4★) "물타기" 알림 2단계 로직
+        int buyTheDipLevel = 0; // 0: N/A, 1: "슬슬", 2: "드가자"
+        if (currentPrice > 0 && avgPrice_A > 0 && currentQuantity_A > 0) {
+          if (currentProfitRate_A <= -10.0) {
+            buyTheDipLevel = 2; // -10% 이하
+          } else if (currentProfitRate_A <= -5.0) {
+            buyTheDipLevel = 1; // -5% ~ -10%
+          }
+        }
+
         bool showTargetReached = false;
         if (targetProfitRate > 0 && currentProfitRate_A >= targetProfitRate) {
           showTargetReached = true;
@@ -828,6 +854,13 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
         bool showSplitFinished = (tValue >= splitCount &&
             !isManuallyCompleted &&
             (currentQuantity_A + currentQuantity_B) > 0);
+
+        // (★3단계-3★) 폭락장 경고용 예측 최저가
+        double predictedMinPrice = 0.0;
+        if (x < 0 && previousClosePrice > 0 && kMin > 0) {
+          // 하락 시 예측 최저가 (Track B의 minBuyPx와 동일)
+          predictedMinPrice = previousClosePrice * (1 + ( (x / kMin) / 100 ));
+        }
 
         return Scaffold(
           appBar: AppBar(
@@ -858,8 +891,8 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // (★수정★) 5대 필수 입력 카드
-                _buildInfoCard("필수 입력 (5)", [
+                // (★수정★) "9시 개장전 필수 입력사항" (단기 매수 금액은 제외)
+                _buildInfoCard("9시 개장전 필수 입력사항", [
                   TextField(
                     controller: _currentPriceController,
                     decoration: const InputDecoration(labelText: '현재 주가 (원)'),
@@ -896,37 +929,77 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                   ),
                 ]),
 
+                // (★3단계-1★) "오늘의 예측" 카드 (신규 추가)
+                _buildInfoCard("오늘의 예측 (Track B 기준)", [
+                  _buildInfoRow(
+                    '예측 상승률:', // (★수정★) "오늘의" 삭제
+                    // (★수정★) x < 0 일 때 min/max를 뒤집어서 작은 값 ~ 큰 값 순으로 표시
+                    (x == 0 || kMin == 0 || kMax == 0) ? '0.00 % ~ 0.00 %' 
+                      : (x > 0 
+                          ? '${predKrMinRate.toStringAsFixed(2)} % ~ ${predKrMaxRate.toStringAsFixed(2)} %'
+                          : '${predKrMinRate_Down.toStringAsFixed(2)} % ~ ${predKrMaxRate_Down.toStringAsFixed(2)} %'
+                        ),
+                    valueColor: x > 0 ? Colors.red : (x < 0 ? Colors.blue.shade700 : textColor),
+                    textColor: textColor,
+                    subTextColor: subTextColor,
+                    valueFontSize: 15.0, // (★수정★) 폰트 크기 16 -> 15
+                  ),
+                  _buildInfoRow(
+                    '예측 주가:', // (★수정★) "오늘의" 삭제
+                    // (★수정★) x < 0 일 때 min/max를 뒤집어서 작은 값 ~ 큰 값 순으로 표시
+                    (x == 0 || previousClosePrice == 0) ? '${previousClosePrice.toStringAsFixed(0)} 원'
+                      : (x > 0 
+                          ? '${minTargetPx.toStringAsFixed(0)} 원 ~ ${maxTargetPx.toStringAsFixed(0)} 원'
+                          : '${minBuyPx.toStringAsFixed(0)} 원 ~ ${maxBuyPx.toStringAsFixed(0)} 원'
+                        ),
+                    valueColor: x > 0 ? Colors.red : (x < 0 ? Colors.blue.shade700 : textColor),
+                    textColor: textColor,
+                    subTextColor: subTextColor,
+                    valueFontSize: 15.0, // (★수정★) 폰트 크기 16 -> 15
+                  ),
+                ]),
                 // (★수정★) 평가 손익 카드 (듀얼 지갑)
                 _buildInfoCard("종합 평가 손익 (Unrealized)", [
-                  _buildInfoRow(
-                    '종합 평가 손익:',
-                    '${totalProfitLoss.toStringAsFixed(0)} 원',
-                    valueColor: totalProfitColor,
+                  // (★수정★) 숫자 잘림 방지를 위해 _buildInfoRow 사용 중지
+                  _buildProfitRow(
+                    title: '종합 평가 손익:',
+                    amount: totalProfitLoss,
+                    rate: totalProfitRate,
+                    color: totalProfitColor,
                     textColor: textColor,
                     subTextColor: subTextColor,
                   ),
-                  _buildInfoRow(
-                    '종합 평가 수익률:',
-                    '${totalProfitRate.toStringAsFixed(2)} %',
-                    valueColor: totalProfitColor,
+                  _buildProfitRow(
+                    title: '종합 평가 수익률:',
+                    amount: null, // 금액(원) 표시 안 함
+                    rate: totalProfitRate,
+                    color: totalProfitColor,
                     textColor: textColor,
                     subTextColor: subTextColor,
                   ),
+                  
                   const Divider(height: 24),
-                  _buildInfoRow(
-                    'ㄴ 장기(A) 손익:',
-                    '${currentProfitLoss_A.toStringAsFixed(0)} 원 (${currentProfitRate_A.toStringAsFixed(2)} %)',
-                    valueColor: currentProfitColor_A,
+
+                  // (★수정★) 요청하신 대로 '장기:' / '단기:'로 축소
+                  _buildProfitRow(
+                    title: '장기(A):', // (★수정★)
+                    amount: currentProfitLoss_A,
+                    rate: currentProfitRate_A,
+                    color: currentProfitColor_A,
                     textColor: textColor,
                     subTextColor: subTextColor,
+                    fontSize: 14.0, // (★수정★) 폰트 크기 14
                   ),
-                  _buildInfoRow(
-                    'ㄴ 단기(B) 손익:',
-                    '${currentProfitLoss_B.toStringAsFixed(0)} 원 (${currentProfitRate_B.toStringAsFixed(2)} %)',
-                    valueColor: currentProfitColor_B,
-                    textColor: textColor, // (★오류 수정 지점★)
+                  _buildProfitRow(
+                    title: '단기(B):', // (★수정★)
+                    amount: currentProfitLoss_B,
+                    rate: currentProfitRate_B,
+                    color: currentProfitColor_B,
+                    textColor: textColor,
                     subTextColor: subTextColor,
+                    fontSize: 14.0, // (★수정★) 폰트 크기 14
                   ),
+                  
                   const Divider(height: 24),
                   _buildInfoRow(
                     '장기(A) 목표 수익률:',
@@ -964,6 +1037,34 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                     ),
                   ),
                 ]),
+
+                // (★3단계-4★) "물타기" 알림 2단계 UI (신규 추가)
+                if (buyTheDipLevel == 2) // -10% 이하
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: Text(
+                      '물타기 드가자!!! (Track A)',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green.shade600,
+                      ),
+                    ),
+                  ),
+                if (buyTheDipLevel == 1) // -5% ~ -10%
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: Text(
+                      '슬슬 물타기 할까?? (Track A)',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green.shade400,
+                      ),
+                    ),
+                  ),
 
                 if (showTargetReached && !showSplitFinished)
                   // ... (알림 메시지 - 내용 동일) ...
@@ -1130,33 +1231,34 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                 ] else if (x < 0) ...[
                   // --- 2. 미국장 하락 시 (x < 0) ---
                   _buildInfoCard("📉 2순위: Track B 4단계 분할 매수 (단기 물타기)", [
-                    //
+                    // (★수정★) 금액 -> 주식 수 계산
                     Text(
-                        '오늘 장중에 아래 4개의 보통지정가 매수 주문을 (당일 유효)로 거세요. (총 매수 예산: ${totalBuyAmount_B_Down.toStringAsFixed(0)}원)'), //
+                        '오늘 장중에 아래 4개의 보통지정가 매수 주문을 (당일 유효)로 거세요. (총 매수 예산: ${totalBuyAmount_B_Down.toStringAsFixed(0)}원)'),
                     _buildDirectiveRow(
-                      '1차 (25%):', //
-                      '${buyTargetPx1.toStringAsFixed(0)} 원에 ${splitBuyAmount_B_Down.toStringAsFixed(0)}원 만큼 매수',
+                      '1차 (25%):', 
+                      // (★수정★) "금액 -> 주식 수"로 변경 (PDF 가이드 수정 사항 반영)
+                      '${buyTargetPx1.toStringAsFixed(0)} 원 X ${(buyTargetPx1 == 0 ? 0 : splitBuyAmount_B_Down / buyTargetPx1).toStringAsFixed(4)} 주',
                       valueColor: Colors.red.shade700,
                       textColor: textColor,
                       subTextColor: subTextColor,
                     ),
                     _buildDirectiveRow(
-                      '2차 (25%):', //
-                      '${buyTargetPx2.toStringAsFixed(0)} 원에 ${splitBuyAmount_B_Down.toStringAsFixed(0)}원 만큼 매수',
+                      '2차 (25%):', 
+                      '${buyTargetPx2.toStringAsFixed(0)} 원 X ${(buyTargetPx2 == 0 ? 0 : splitBuyAmount_B_Down / buyTargetPx2).toStringAsFixed(4)} 주',
                       valueColor: Colors.red.shade700,
                       textColor: textColor,
                       subTextColor: subTextColor,
                     ),
                     _buildDirectiveRow(
-                      '3차 (25%):', //
-                      '${buyTargetPx3.toStringAsFixed(0)} 원에 ${splitBuyAmount_B_Down.toStringAsFixed(0)}원 만큼 매수',
+                      '3차 (25%):', 
+                      '${buyTargetPx3.toStringAsFixed(0)} 원 X ${(buyTargetPx3 == 0 ? 0 : splitBuyAmount_B_Down / buyTargetPx3).toStringAsFixed(4)} 주',
                       valueColor: Colors.red.shade700,
                       textColor: textColor,
                       subTextColor: subTextColor,
                     ),
                     _buildDirectiveRow(
-                      '4차 (25%):', //
-                      '${buyTargetPx4.toStringAsFixed(0)} 원에 ${splitBuyAmount_B_Down.toStringAsFixed(0)}원 만큼 매수',
+                      '4차 (25%):', 
+                      '${buyTargetPx4.toStringAsFixed(0)} 원 X ${(buyTargetPx4 == 0 ? 0 : splitBuyAmount_B_Down / buyTargetPx4).toStringAsFixed(4)} 주',
                       valueColor: Colors.red.shade700,
                       textColor: textColor,
                       subTextColor: subTextColor,
@@ -1178,67 +1280,95 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                   ]),
                 ],
 
-                // --- (★핵심★) Track A: 무매 지침 (항상 표시) ---
+                // --- (★3단계★) Track A: "무매" 고도화 지침 ---
                 _buildInfoCard(
-                    "🔴 Track A: 조건부지정가 매수(장기 누적) (Star = ${starValue.toStringAsFixed(2)}%)",
+                    "🔴 Track A: 조건부지정가 매수(장기) (Star = ${starValue.toStringAsFixed(2)}%)",
                     [
                       _buildDirectiveRow(
-                        isFirstBuy_A ? '조건부(장기) 현재가:' : '조건부(장기) 평단:', //
+                        isFirstBuy_A ? '조건부(장기) 현재가 (50%):' : '조건부(장기) 평단 (50%):',
                         '${displayAvgPrice_A.toStringAsFixed(0)} 원 X ${buyQtyAtAvg_A.toStringAsFixed(4)} 주',
                         valueColor: Colors.red.shade700,
                         textColor: textColor,
                         subTextColor: subTextColor,
                       ),
                       _buildDirectiveRow(
-                        '조건부(장기) Star%:', //
+                        '조건부(장기) Star% (50%):',
                         '${calcBuyPrice_A.toStringAsFixed(0)} 원 X ${buyQtyAtStar_A.toStringAsFixed(4)} 주',
                         valueColor: Colors.red.shade700,
                         textColor: textColor,
                         subTextColor: subTextColor,
                       ),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Text(
+                          '(오늘의 1회 투자금: ${totalDailyInvestment.toStringAsFixed(0)}원, x% 연동)',
+                          style: TextStyle(fontSize: 12, color: subTextColor),
+                        ),
+                      ),
+
                       const Divider(height: 20),
-                      Text('+@ 폭락장(장기) (1주 고정)', // (★수정★) 1주 고정 명시
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold, color: textColor)),
-                      _buildDirectiveRow(
-                          'LOC (평단*98.07%):',
-                          '${(displayAvgPrice_A * 0.98067).toStringAsFixed(0)} 원 X 1 주',
-                          valueColor: Colors.red.shade700,
-                          textColor: textColor,
-                          subTextColor: subTextColor),
-                      _buildDirectiveRow(
-                          'LOC (평단*95.27%):',
-                          '${(displayAvgPrice_A * 0.95267).toStringAsFixed(0)} 원 X 1 주',
-                          valueColor: Colors.red.shade700,
-                          textColor: textColor,
-                          subTextColor: subTextColor),
-                      _buildDirectiveRow(
-                          'LOC (평단*92.67%):',
-                          '${(displayAvgPrice_A * 0.92667).toStringAsFixed(0)} 원 X 1 주',
-                          valueColor: Colors.red.shade700,
-                          textColor: textColor,
-                          subTextColor: subTextColor),
-                      _buildDirectiveRow(
-                          'LOC (평단*90.27%):',
-                          '${(displayAvgPrice_A * 0.90267).toStringAsFixed(0)} 원 X 1 주',
-                          valueColor: Colors.red.shade700,
-                          textColor: textColor,
-                          subTextColor: subTextColor),
-                      _buildDirectiveRow(
-                          'LOC (평단*88.13%):',
-                          '${(displayAvgPrice_A * 0.88133).toStringAsFixed(0)} 원 X 1 주',
-                          valueColor: Colors.red.shade700,
-                          textColor: textColor,
-                          subTextColor: subTextColor),
-                      _buildDirectiveRow(
-                          'LOC (평단*86.13%):',
-                          '${(displayAvgPrice_A * 0.86133).toStringAsFixed(0)} 원 X 1 주',
-                          valueColor: Colors.red.shade700,
-                          textColor: textColor,
-                          subTextColor: subTextColor),
+                      
+                      // (★3단계-3★) 폭락장 매수 로직 (순수 원금의 30%)
+                      Builder(
+                        builder: (context) {
+                          // (★오류 수정★) totalSellAmount_A를 double로 먼저 변환
+                          final double totalSellAmount_A = (data['totalSellAmount_A'] as num?)?.toDouble() ?? 0.0;
+                          
+                          // (★오류 수정★) 변환된 double 값으로 계산
+                          final double currentNetCost_A = currentPurchaseAmount_A - totalSellAmount_A;
+                          final double crashBuyAmount_A_Total = currentNetCost_A * 0.30;
+                          final double crashBuyAmount_A_PerLine = (crashBuyAmount_A_Total > 0) ? (crashBuyAmount_A_Total / 6.0) : 0.0;
+
+                          final ratios = [0.98067, 0.95267, 0.92667, 0.90267, 0.88133, 0.86133];
+                          List<Widget> crashBuyDirectives = [];
+
+                          for (var ratio in ratios) {
+                            final double crashPrice = displayAvgPrice_A * ratio;
+                            final double crashQty = (crashPrice == 0 || crashBuyAmount_A_PerLine == 0) 
+                                                      ? 0 
+                                                      : (crashBuyAmount_A_PerLine / crashPrice);
+                            
+                            // (★3단계-3★) 경고 로직
+                            bool showAlert = (x < 0 && predictedMinPrice > 0 && predictedMinPrice <= crashPrice);
+
+                            crashBuyDirectives.add(
+                              _buildDirectiveRow(
+                                '지정가 (평단*${(ratio * 100).toStringAsFixed(2)}%):', // (★3단계-1★) LOC->지정가
+                                '${crashPrice.toStringAsFixed(0)} 원 X ${crashQty.toStringAsFixed(4)} 주',
+                                valueColor: showAlert ? Colors.red.shade900 : Colors.red.shade700, // (★3단계-3★)
+                                textColor: textColor,
+                                subTextColor: subTextColor,
+                                isBold: showAlert, // (★3단계-3★)
+                              ),
+                            );
+                          }
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                               Text(
+                                '+@ 지정가 매수(장기) (순수원금의 30% 분배)', // (★3단계-1,3★)
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold, color: textColor)),
+                               if (crashBuyAmount_A_Total <= 0)
+                                  Text(
+                                    '(순수 매수금액이 0원이므로, 뭉칫돈 매수가 비활성화됩니다.)',
+                                    style: TextStyle(fontSize: 12, color: subTextColor),
+                                  ),
+                               if (x < 0 && predictedMinPrice > 0)
+                                  Text(
+                                    '(예측 최저가: ${predictedMinPrice.toStringAsFixed(0)}원. 도달 가능 구간 강조)',
+                                    style: TextStyle(fontSize: 12, color: Colors.red.shade900, fontWeight: FontWeight.bold),
+                                  ),
+                                const SizedBox(height: 4),
+                                ...crashBuyDirectives,
+                            ],
+                          );
+                        }
+                      ),
                     ]),
                 _buildInfoCard("🔵 Track A: 지정가 매도 (장기 누적)", [
-                  //
+                                  //
                   _buildDirectiveRow(
                     '조건부(장기) Star%:', //
                     '${sellPrice1_A.toStringAsFixed(0)} 원 X ${sellQty1_A.toStringAsFixed(4)} 주',
@@ -1247,7 +1377,7 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                     subTextColor: subTextColor,
                   ),
                   _buildDirectiveRow(
-                    'After(장기) $targetProfitRate%:', //
+                    'After 지정가 $targetProfitRate%:', // (★3단계-1★) 용어 수정
                     '${sellPrice2_A.toStringAsFixed(0)} 원 X ${sellQty2_A.toStringAsFixed(4)} 주',
                     valueColor: Colors.blue.shade700,
                     textColor: textColor,
@@ -1347,33 +1477,49 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
     );
   }
 
+// (★오류 수정★) 헬퍼 위젯 1: 일반 텍스트용 (제목 + 값)
+  // "예측 상승률", "예측 주가" 등 숫자 잘림이 덜 민감한 곳에 사용
   Widget _buildInfoRow(String title, String value,
       {Color? valueColor,
       required Color textColor,
       required Color subTextColor,
       Widget? trailing,
-      VoidCallback? onTap}) {
+      VoidCallback? onTap,
+      double valueFontSize = 16.0}) { 
     return InkWell(
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4.0),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(title, style: TextStyle(color: subTextColor)),
-            Row(
-              children: [
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: valueColor ?? textColor,
+            // 1. 제목: 필요한 만큼만 공간 차지
+            Text(
+              title, 
+              style: TextStyle(color: subTextColor),
+            ),
+            const SizedBox(width: 16), // 제목과 값 사이 최소 간격
+
+            // 2. 값(Row): 남은 공간을 모두 차지 (오른쪽 정렬)
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end, 
+                children: [
+                  Flexible( // 텍스트가 너무 길면 ... 처리
+                    child: Text(
+                      value,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: valueFontSize, 
+                        color: valueColor ?? textColor,
+                      ),
+                      overflow: TextOverflow.ellipsis, 
+                      textAlign: TextAlign.end, 
+                    ),
                   ),
-                ),
-                if (trailing != null) const SizedBox(width: 8),
-                if (trailing != null) trailing,
-              ],
+                  if (trailing != null) const SizedBox(width: 8),
+                  if (trailing != null) trailing,
+                ],
+              ),
             ),
           ],
         ),
@@ -1381,10 +1527,85 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
     );
   }
 
+  // (★신규★) 헬퍼 위젯 2: "손익" 전용 (숫자 잘림 절대 방지)
+  // [제목] [............] [금액(원) (수익률 %)]
+  Widget _buildProfitRow({
+    required String title,
+    double? amount, // 금액(원) - null이면 표시 안 함
+    required double rate, // 수익률(%)
+    required Color color,
+    required Color textColor,
+    required Color subTextColor,
+    double fontSize = 16.0,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        children: [
+          // 1. 제목 (왼쪽)
+          Text(
+            title,
+            style: TextStyle(color: subTextColor, fontSize: (fontSize < 16.0 ? fontSize : 16.0)),
+          ),
+          
+          const SizedBox(width: 16), // 제목과 값 사이 최소 간격
+
+          // 2. 값 그룹 (오른쪽, 남은 공간 모두 차지)
+          Expanded(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                // (★오류 수정★) FittedBox로 감싸서,
+                // 공간이 부족하면 폰트 크기를 '자동으로 줄여서'라도 다 보이게 함
+                Flexible( // FittedBox가 Row 내에서 공간을 인지하도록
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown, // 공간에 맞게 축소
+                    alignment: Alignment.centerRight,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 3. 금액 (null이 아닐 때)
+                        if (amount != null)
+                          Text(
+                            '${amount.toStringAsFixed(0)} 원',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: fontSize,
+                              color: color,
+                            ),
+                          ),
+
+                        // 4. 수익률
+                        Padding(
+                          padding: EdgeInsets.only(left: (amount != null) ? 8.0 : 0.0),
+                          child: Text(
+                            (amount != null) 
+                              ? '(${rate.toStringAsFixed(2)} %)'
+                              : '${rate.toStringAsFixed(2)} %',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: fontSize,
+                              color: color,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDirectiveRow(String title, String value,
       {Color? valueColor,
       required Color textColor,
-      required Color subTextColor}) {
+      required Color subTextColor,
+      bool isBold = false}) { // (★3단계-3★) isBold 추가
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2.0),
       child: Row(
@@ -1393,7 +1614,11 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
           Flexible(
             flex: 4,
             child:
-                Text(title, style: TextStyle(color: subTextColor, fontSize: 13)),
+                Text(title, style: TextStyle(
+                  color: (isBold && valueColor != null) ? valueColor : subTextColor, // (★3단계-3★)
+                  fontSize: 13,
+                  fontWeight: isBold ? FontWeight.bold : FontWeight.normal, // (★3단계-3★)
+                  )),
           ),
           Flexible(
             flex: 6,
@@ -1401,7 +1626,7 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
               value,
               textAlign: TextAlign.end,
               style: TextStyle(
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.bold, // (★3단계-3★) 값은 항상 Bold
                 color: valueColor ?? textColor,
                 fontSize: 13,
               ),
