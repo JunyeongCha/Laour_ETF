@@ -650,8 +650,10 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
         final String nickname = data['nickname'] ?? '';
         final double totalSeed = (data['totalSeed'] as num?)?.toDouble() ?? 0.0;
         final int splitCount = (data['splitCount'] as num?)?.toInt() ?? 1;
-        final double targetProfitRate =
-            (data['targetProfitRate'] as num?)?.toDouble() ?? 0.0;
+
+        // (★4단계 수정★) 3배수 목표수익률을 '읽기만' 함
+        final double targetProfitRate_3x = (data['targetProfitRate_3x'] as num?)?.toDouble() ?? 0.0;
+        
         final double oneTimeInvestment =
             (splitCount == 0) ? 0 : (totalSeed / splitCount);
 
@@ -659,6 +661,9 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
         final double kMin = (data['kMin'] as num?)?.toDouble() ?? 3.185;
         final double kMax = (data['kMax'] as num?)?.toDouble() ?? 3.185;
         final double kAvg = (data['kAvg'] as num?)?.toDouble() ?? 3.185;
+
+        // (★4단계 오류 수정★) kAvg를 선언한 '직후'에 실제 목표수익률 계산
+        final double targetProfitRate = (kAvg == 0) ? 0.0 : (targetProfitRate_3x / kAvg);
 
         // (C. 핵심 상태 변수 - 듀얼 지갑)
         // [Track A: 장기]
@@ -1002,10 +1007,18 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                   
                   const Divider(height: 24),
                   _buildInfoRow(
-                    '장기(A) 목표 수익률:',
-                    '${targetProfitRate.toStringAsFixed(1)} %',
+                    '3배수 목표 수익률:', // (★4단계 신규★)
+                    '${targetProfitRate_3x.toStringAsFixed(1)} %',
                     textColor: textColor,
                     subTextColor: subTextColor,
+                    valueFontSize: 14.0, // 폰트 축소
+                  ),
+                  _buildInfoRow(
+                    '실제 목표 수익률(A):', // (★4단계 수정★)
+                    '${targetProfitRate.toStringAsFixed(1)} %', // (계산된 값 사용)
+                    textColor: textColor,
+                    subTextColor: subTextColor,
+                    valueFontSize: 14.0, // 폰트 축소
                   ),
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -1377,7 +1390,7 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                     subTextColor: subTextColor,
                   ),
                   _buildDirectiveRow(
-                    'After 지정가 $targetProfitRate%:', // (★3단계-1★) 용어 수정
+                    'After 지정가 ${targetProfitRate.toStringAsFixed(1)}%:', // (★4단계 수정★)
                     '${sellPrice2_A.toStringAsFixed(0)} 원 X ${sellQty2_A.toStringAsFixed(4)} 주',
                     valueColor: Colors.blue.shade700,
                     textColor: textColor,

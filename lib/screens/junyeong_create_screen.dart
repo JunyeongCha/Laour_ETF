@@ -1,4 +1,4 @@
-// // lib/screens/junyeong_create_screen.dart (★2-2단계: k-Factor 확장 완료★)
+// // lib/screens/junyeong_create_screen.dart (★4단계: 3배수 목표수익률 적용★)
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -51,8 +51,11 @@ class _JunyeongCreateScreenState extends State<JunyeongCreateScreen> {
       final double totalSeed =
           double.tryParse(_totalSeedController.text) ?? 0.0;
       final int splitCount = int.tryParse(_splitCountController.text) ?? 1;
-      final double targetProfitRate =
+      
+      // (★4단계 수정★) "3배수 목표 수익률"을 읽음
+      final double targetProfitRate_3x =
           double.tryParse(_targetProfitRateController.text) ?? 0.0;
+      
       final double currentPrice =
           double.tryParse(_currentPriceController.text) ?? 0.0;
 
@@ -64,13 +67,13 @@ class _JunyeongCreateScreenState extends State<JunyeongCreateScreen> {
       // (★2-2단계 수정★) k-Factor 할당 로직 확장
       double kMin, kMax, kAvg;
       if (_selectedJunyeongItem == 'TIGER 미국필라델피아반도체레버리지') {
-        kMin = 2.68; // [cite: 21]
-        kMax = 3.69; // [cite: 21]
-        kAvg = 3.185; // [cite: 23]
+        kMin = 2.68; 
+        kMax = 3.69; 
+        kAvg = 3.185; 
       } else if (_selectedJunyeongItem == 'KODEX 미국나스닥100레버리지') {
-        kMin = 3.47; // [cite: 22]
-        kMax = 3.53; // [cite: 22]
-        kAvg = 3.50; // 
+        kMin = 3.47; 
+        kMax = 3.53; 
+        kAvg = 3.50; 
       } else if (_selectedJunyeongItem == 'PLUS 미국테크TOP10레버리지' ||
                  _selectedJunyeongItem == 'ACE 미국빅테크TOP7 PLUS레버리지') {
         // (★2-2단계★) 요청사항: ACE와 PLUS는 KODEX 값을 임시로 사용
@@ -90,7 +93,10 @@ class _JunyeongCreateScreenState extends State<JunyeongCreateScreen> {
         'nickname': _nicknameController.text.trim(),
         'totalSeed': totalSeed,
         'splitCount': splitCount,
-        'targetProfitRate': targetProfitRate,
+        
+        // (★4단계 수정★) 'targetProfitRate' 대신 'targetProfitRate_3x'로 저장
+        'targetProfitRate_3x': targetProfitRate_3x,
+        
         'createdAt': Timestamp.now(),
 
         'currentPrice': currentPrice,
@@ -284,10 +290,13 @@ class _JunyeongCreateScreenState extends State<JunyeongCreateScreen> {
                 },
               ),
               const SizedBox(height: 16),
+              
+              // (★4단계 수정★)
               TextFormField(
                 controller: _targetProfitRateController,
                 decoration: const InputDecoration(
-                    labelText: '목표 수익률 (%)', hintText: '예: 10'),
+                    labelText: '3배수 목표 수익률 (%)', // (★4단계 수정★)
+                    helperText: 'TQQQ 기준 3배수 수익률을 입력하세요. (예: 10)'), // (★4단계 수정★)
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
                 validator: (value) {
