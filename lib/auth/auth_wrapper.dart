@@ -1,11 +1,11 @@
-//lib/auth/auth_wrapper.dart
+//lib/auth/auth_wrapper.dart (★4.5단계 수정 완료★)
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:laour_etf/auth/secure_storage_service.dart';
 import 'package:laour_etf/screens/account_picker_screen.dart';
 import 'package:laour_etf/screens/home_screen.dart';
-import 'package:laour_etf/screens/login_screen.dart';
+// import 'package:laour_etf/screens/login_screen.dart'; // (★4.5단계★) 더 이상 사용 안 함
 import 'package:provider/provider.dart';
 
 class AuthWrapper extends StatelessWidget {
@@ -33,13 +33,18 @@ class AuthWrapper extends StatelessWidget {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
         
-        // 4. 저장된 계정이 있으면
-        if (storageSnapshot.hasData && storageSnapshot.data!.isNotEmpty) {
-          return AccountPickerScreen(savedEmails: storageSnapshot.data!);
-        }
-
-        // 5. 저장된 계정이 없으면
-        return const LoginScreen();
+        // (★4.5단계 수정★)
+        // 저장된 계정이 있든(storageSnapshot.data) 없든(null)
+        // "항상" AccountPickerScreen을 보여줍니다.
+        // AccountPickerScreen이 (data ?? []) 빈 리스트를 받아
+        // "저장된 계정이 없습니다" UI를 표시합니다.
+        return AccountPickerScreen(savedEmails: storageSnapshot.data ?? []);
+        
+        // (★4.5단계★) 이 로직은 더 이상 사용되지 않습니다.
+        // if (storageSnapshot.hasData && storageSnapshot.data!.isNotEmpty) {
+        //   return AccountPickerScreen(savedEmails: storageSnapshot.data!);
+        // }
+        // return const LoginScreen();
       },
     );
   }

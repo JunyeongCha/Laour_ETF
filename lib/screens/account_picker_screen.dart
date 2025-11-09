@@ -1,10 +1,13 @@
+// lib/screens/account_picker_screen.dart (★4.5단계 수정 완료★)
+
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:laour_etf/auth/auth_wrapper.dart';
 import 'package:laour_etf/auth/secure_storage_service.dart';
 import 'package:laour_etf/screens/login_screen.dart';
 import 'package:laour_etf/auth/auth_service.dart';
 import 'package:provider/provider.dart';
+// (★4.5단계 신규★)
+import 'package:laour_etf/screens/save_account_screen.dart'; 
 
 class AccountPickerScreen extends StatefulWidget {
   final List<String> savedEmails;
@@ -16,9 +19,9 @@ class AccountPickerScreen extends StatefulWidget {
 
 class _AccountPickerScreenState extends State<AccountPickerScreen> {
   final SecureStorageService _storageService = SecureStorageService();
-  bool _isLoggingIn = false; // 원터치 로그인 시 로컬 로딩 상태
+  bool _isLoggingIn = false; 
 
-  // 원터치 로그인
+  // (주석) 원터치 로그인 (수정 없음)
   void _loginWithSavedAccount(String email) async {
     if (_isLoggingIn) return;
     setState(() => _isLoggingIn = true);
@@ -41,12 +44,13 @@ class _AccountPickerScreenState extends State<AccountPickerScreen> {
         );
       }
     }
+    // (★수정★) 성공/실패 여부와 관계없이 로딩 해제 (AuthService가 성공 시 화면 전환)
     if (mounted) {
        setState(() => _isLoggingIn = false);
     }
   }
 
-  // (★수정★) 6-2: 이 함수를 활성화
+  // (주석) 계정 삭제 (수정 없음)
   void _deleteAccount(String email) async {
     bool confirmDelete = await showDialog(
       context: context,
@@ -64,9 +68,6 @@ class _AccountPickerScreenState extends State<AccountPickerScreen> {
       try { 
         await _storageService.deleteAccount(email);
         if (mounted) {
-          // (★중요★)
-          // 삭제 후 AuthWrapper를 다시 로드하여 스토리지 상태를
-          // 재검사하도록 스택을 리셋합니다.
           Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(builder: (context) => const AuthWrapper()),
             (route) => false,
@@ -102,39 +103,67 @@ class _AccountPickerScreenState extends State<AccountPickerScreen> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 20),
+            
+            // (★4.5단계 수정★) 저장된 계정이 없을 때 UI 처리
             Expanded(
-              child: ListView.builder(
-                itemCount: widget.savedEmails.length,
-                itemBuilder: (context, index) {
-                  final email = widget.savedEmails[index];
-                  return Card(
-                    child: ListTile(
-                      title: Text(email),
-                      leading: const Icon(Icons.account_circle),
-                      onTap: isAuthLoading ? null : () => _loginWithSavedAccount(email),
-                      // (★수정★) 6-2: 삭제 버튼 활성화
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline, color: Colors.grey),
-                        // ★★★ onPressed를 null에서 _deleteAccount 함수로 변경 ★★★
-                        onPressed: isAuthLoading ? null : () => _deleteAccount(email), 
-                      ),
+              child: widget.savedEmails.isEmpty
+                ? const Center(
+                    child: Text(
+                      '저장된 계정이 없습니다.\n아래 버튼으로 새 계정 정보를 수동 저장하세요.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 16, color: Colors.grey),
                     ),
-                  );
-                },
-              ),
+                  )
+                : ListView.builder(
+                    itemCount: widget.savedEmails.length,
+                    itemBuilder: (context, index) {
+                      final email = widget.savedEmails[index];
+                      return Card(
+                        child: ListTile(
+                          title: Text(email),
+                          leading: const Icon(Icons.account_circle),
+                          onTap: (isAuthLoading || _isLoggingIn) ? null : () => _loginWithSavedAccount(email),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Colors.grey),
+                            onPressed: (isAuthLoading || _isLoggingIn) ? null : () => _deleteAccount(email), 
+                          ),
+                        ),
+                      );
+                    },
+                  ),
             ),
+            
             if (isAuthLoading || _isLoggingIn) const Center(child: CircularProgressIndicator()),
             const SizedBox(height: 20),
             
+            // (★4.5단계 신규★) "새로운 아이디 저장하기" 버튼
+            ElevatedButton(
+              onPressed: (isAuthLoading || _isLoggingIn) ? null : () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SaveAccountScreen()),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 45), 
+              ),
+              child: const Text('새로운 아이디 저장하기'),
+            ),
+            const SizedBox(height: 8), // 버튼 사이 간격
+
             OutlinedButton(
-              onPressed: isAuthLoading ? null : () { 
+              onPressed: (isAuthLoading || _isLoggingIn) ? null : () { 
                 context.read<AuthService>().clearState();
                 
-                Navigator.of(context).pushReplacement(
+                // (★4.5단계 수정★) pushReplacement -> push
+                // LoginScreen에서 뒤로가기(<-)를 눌렀을 때 
+                // 이 AccountPickerScreen으로 돌아와야 함.
+                Navigator.push(
+                  context,
                   MaterialPageRoute(builder: (context) => const LoginScreen()),
                 );
               }, 
-              child: const Text('다른 계정으로 로그인'),
+              child: const Text('다른 계정으로 로그인 (저장 안 함)'), // (★수정★)
             ),
           ],
         ),
