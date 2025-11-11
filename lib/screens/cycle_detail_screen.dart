@@ -466,10 +466,13 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
         final double sellPrice2 = displayAvgPrice * (1 + (targetProfitRate / 100));
         final double sellQty2 = currentQuantity * 3.0 / 4.0;
         
-        bool showBuyTheDip = false;
-        if (_savedPrice > 0 && currentPrice > 0 && currentQuantity > 0) {
-          if (currentPrice <= (_savedPrice * 0.90)) {
-            showBuyTheDip = true;
+        // [!] 5-2: (물타기 알림) "준영" 로직 (수익률 기반)으로 변경
+        int buyTheDipLevel = 0; // 0: N/A, 1: "슬슬", 2: "드가자"
+        if (currentPrice > 0 && avgPrice > 0 && currentQuantity > 0) {
+          if (currentProfitRate <= -10.0) {
+            buyTheDipLevel = 2; // -10% 이하
+          } else if (currentProfitRate <= -5.0) {
+            buyTheDipLevel = 1; // -5% ~ -10%
           }
         }
         
@@ -589,21 +592,35 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                   ),
                 ]),
                 
-                if (showBuyTheDip)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: Text(
-                      '물타기 드가자!!! 주워담아!',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green.shade600,
-                      ),
-                    ),
+// [!] 5-2: (물타기 알림) "준영" UI 로직으로 변경
+          if (buyTheDipLevel == 2) // -10% 이하
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Text(
+                '물타기 드가자!!!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green.shade600,
+                ),
+              ),
+            ),
+            if (buyTheDipLevel == 1) // -5% ~ -10%
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Text(
+                  '슬슬 물타기 할까??',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green.shade400,
                   ),
-                
-                if (showTargetReached && !showSplitFinished)
+                ),
+              ),
+            
+            if (showTargetReached && !showSplitFinished)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8.0),
                     child: Column(
@@ -691,17 +708,55 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                     subTextColor: subTextColor
                   ),
                   const Divider(height: 20),
-                  Text(
-                    '+@ 폭락장 대비 추가 매수 (2배수 기준)', // (★수정★) 4번 
-                    style: TextStyle(fontWeight: FontWeight.bold, color: textColor) // (★수정★) 2번
+                  // [!] 5-1: (폭락장 매수) "준영" 로직 (동적 수량)으로 변경
+                  Builder(
+                    builder: (context) {
+                      // "무매"는 totalSellAmount 필드가 하나임
+                      final double totalSellAmount = (data['totalSellAmount'] as num?)?.toDouble() ?? 0.0;
+                      
+                      final double currentNetCost = currentPurchaseAmount - totalSellAmount;
+                      final double crashBuyAmount_Total = currentNetCost * 0.30;
+                      final double crashBuyAmount_PerLine = (crashBuyAmount_Total > 0) ? (crashBuyAmount_Total / 6.0) : 0.0;
+
+                      final ratios = [0.98067, 0.95267, 0.92667, 0.90267, 0.88133, 0.86133];
+                      List<Widget> crashBuyDirectives = [];
+
+                      for (var ratio in ratios) {
+                        final double crashPrice = displayAvgPrice * ratio;
+                        final double crashQty = (crashPrice == 0 || crashBuyAmount_PerLine == 0) 
+                            ? 0 
+                            : (crashBuyAmount_PerLine / crashPrice);
+                        
+                        crashBuyDirectives.add(
+                          _buildDirectiveRow(
+                            'LOC (평단*${(ratio * 100).toStringAsFixed(2)}%):', 
+                            '${crashPrice.toStringAsFixed(0)} 원 X ${crashQty.toStringAsFixed(4)} 주',
+                            valueColor: Colors.red.shade700, 
+                            textColor: textColor, 
+                            subTextColor: subTextColor
+                          ),
+                        );
+                      }
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '+@ 폭락장 대비 추가 매수 (순수원금의 30% 분배)', 
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, color: textColor)
+                          ),
+                          if (crashBuyAmount_Total <= 0)
+                            Text(
+                              '(순수 매수금액이 0원이므로, 뭉칫돈 매수가 비활성화됩니다.)',
+                              style: TextStyle(fontSize: 12, color: subTextColor),
+                            ),
+                          const SizedBox(height: 4),
+                          ...crashBuyDirectives,
+                        ],
+                      );
+                    }
                   ),
-                  // (★수정★) 4번: 퍼센트 및 배율 변경
-                  _buildDirectiveRow('LOC (평단*98.07%):', '${(displayAvgPrice * 0.98067).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
-                  _buildDirectiveRow('LOC (평단*95.27%):', '${(displayAvgPrice * 0.95267).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
-                  _buildDirectiveRow('LOC (평단*92.67%):', '${(displayAvgPrice * 0.92667).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
-                  _buildDirectiveRow('LOC (평단*90.27%):', '${(displayAvgPrice * 0.90267).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
-                  _buildDirectiveRow('LOC (평단*88.13%):', '${(displayAvgPrice * 0.88133).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
-                  _buildDirectiveRow('LOC (평단*86.13%):', '${(displayAvgPrice * 0.86133).toStringAsFixed(0)} 원 X 1 주', valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
                 ]),
 
                 _buildInfoCard("🔵 매도 지침 (목표 = $targetProfitRate%)", [
@@ -751,7 +806,10 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                   },
                 ),
 
-                if ((showSplitFinished || showTargetReached) && !isManuallyCompleted && currentQuantity > 0)
+                // [!] "정산 완료" 버튼 (0주 && 1회 이상 거래) 조건으로 수정
+                if (!isManuallyCompleted &&
+                    currentQuantity == 0 &&
+                    tValue > 0)
                   Padding(
                     padding: const EdgeInsets.only(top: 24.0),
                     child: OutlinedButton(
@@ -761,7 +819,7 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                         foregroundColor: Colors.blue.shade700,
                         side: BorderSide(color: Colors.blue.shade700),
                       ),
-                      child: Text(showSplitFinished ? '정산완료하기 (분할 종료)' : '정산완료하기 (목표 달성)'),
+                      child: const Text('정산완료하기 (수동)'),
                     ),
                   ),
               ],
