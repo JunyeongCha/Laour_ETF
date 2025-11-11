@@ -757,6 +757,7 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
         bool showTrackB = x.abs() > 3.0; // 3% 룰
 
         // Case 1: 3% 초과 상승
+        // Case 1: 3% 초과 상승
         double recommendedBuyAmount_B = 0.0;
         double sellTargetPx1_B = 0.0,
             sellTargetPx2_B = 0.0,
@@ -771,20 +772,32 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
           // 1순위: 시장가 매수
           recommendedBuyAmount_B = oneTimeInvestment * (1 + (x * kAvg));
 
-          // 2순위: 4분할 지정가 매도
-          if (currentQuantity_B > 0) {
-            double sellRange = predKrMaxPx - predKrMinPx;
-            // [!] 가격 범위 수정 (0.2, 0.45, 0.75, 0.95)
-            sellTargetPx1_B = predKrMinPx + (sellRange * 0.20);
-            sellTargetPx2_B = predKrMinPx + (sellRange * 0.45);
-            sellTargetPx3_B = predKrMinPx + (sellRange * 0.75);
-            sellTargetPx4_B = predKrMinPx + (sellRange * 0.95);
+          // 2순위: 4분할 지정가 매도 (가격은 항상 계산)
+          double sellRange = predKrMaxPx - predKrMinPx;
+          sellTargetPx1_B = predKrMinPx + (sellRange * 0.20);
+          sellTargetPx2_B = predKrMinPx + (sellRange * 0.45);
+          sellTargetPx3_B = predKrMinPx + (sellRange * 0.75);
+          sellTargetPx4_B = predKrMinPx + (sellRange * 0.95);
 
-            // [!] 가중치 수정 (15/35/35/15), 소수점 표시 (floor 제거)
+          if (currentQuantity_B > 0) {
+            // [!] 로직 2: 이미 단기 물량이 있으면, "보유 물량" 기준으로 수량 계산
             sellQty1_B = currentQuantity_B * 0.15;
             sellQty2_B = currentQuantity_B * 0.35;
             sellQty3_B = currentQuantity_B * 0.35;
             sellQty4_B = currentQuantity_B * 0.15;
+          } else {
+            // [!] 로직 1: 단기 물량이 0주면, "예측샷" 수량 계산
+            // 예측 시초가 = 어제 종가 * (1 + x * kMin * 0.30)
+            final double assumedMarketOpenPrice = previousClosePrice * (1 + (x * kMin * 0.30) / 100);
+            
+            if (assumedMarketOpenPrice > 0) {
+              final double assumedBuyQuantity_B = recommendedBuyAmount_B / assumedMarketOpenPrice;
+              
+              sellQty1_B = assumedBuyQuantity_B * 0.15;
+              sellQty2_B = assumedBuyQuantity_B * 0.35;
+              sellQty3_B = assumedBuyQuantity_B * 0.35;
+              sellQty4_B = assumedBuyQuantity_B * 0.15;
+            }
           }
         }
 
@@ -806,13 +819,11 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
           totalBuyAmount_A_Down = oneTimeInvestment * (1 - (x * kAvg));
 
           double buyRange = predHighestPx - predLowestPx;
-          // [!] 가격 범위 수정 (0.2, 0.45, 0.75, 0.95)
           buyTargetPx1_A_Down = predHighestPx - (buyRange * 0.20);
           buyTargetPx2_A_Down = predHighestPx - (buyRange * 0.45);
           buyTargetPx3_A_Down = predHighestPx - (buyRange * 0.75);
           buyTargetPx4_A_Down = predHighestPx - (buyRange * 0.95);
 
-          // [!] 가중치 수정 (15/35/35/15), 소수점 표시 (floor 제거)
           double buyAmount1 = totalBuyAmount_A_Down * 0.15;
           double buyAmount2 = totalBuyAmount_A_Down * 0.35;
           double buyAmount3 = totalBuyAmount_A_Down * 0.35;
@@ -830,11 +841,12 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
               buyQty4_A_Down;
 
           if (totalNewBuyQty > 0) {
-            // [!] 가격 수정 (종가 -0.1%, 종가)
-            sellRecoverPx1 = previousClosePrice * 0.999;
-            sellRecoverPx2 = previousClosePrice;
-
-            // [!] 수량 50:50, 소수점 표시 (floor 제거)
+            // [!] 로직 2: "예측샷" 가격으로 수정
+            // 1차 판매가 = 어제종가 * (1 - x * kMin * 0.40)
+            sellRecoverPx1 = previousClosePrice * (1 + (x * kMin * 0.40) / 100);
+            // 2차 판매가 = 어제종가 * (1 - x * kMin * 0.20)
+            sellRecoverPx2 = previousClosePrice * (1 + (x * kMin * 0.20) / 100);
+            
             sellRecoverQty1 = totalNewBuyQty * 0.5;
             sellRecoverQty2 = totalNewBuyQty * 0.5;
           }
@@ -1122,6 +1134,14 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                     textColor: textColor,
                     subTextColor: subTextColor,
                   ),
+                  // [!] K-Factor 디버그용 표시
+                  _buildInfoRow(
+                    'k(Min/Avg/Max):',
+                    '${kMin.toStringAsFixed(3)} / ${kAvg.toStringAsFixed(3)} / ${kMax.toStringAsFixed(3)}',
+                    textColor: textColor,
+                    subTextColor: subTextColor,
+                    valueFontSize: 12.0, // 폰트 작게
+                  ),
                   const Divider(height: 24),
                   Text('Track A: 장기 누적',
                       style:
@@ -1232,6 +1252,15 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                         Text(
                           '아래 4개의 지정가 매도 주문을 (당일 유효)로 거세요.',
                           style: TextStyle(color: subTextColor, fontSize: 13),
+                          ),
+                        // [!] 로직 2: 롤오버 경고 문구 추가
+                        if (currentQuantity_B > 0)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4.0),
+                            child: Text(
+                              '(어제 물량이라면 롤오버 부탁드립니다)',
+                              style: TextStyle(color: Colors.orange.shade700, fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
                           ),
                         const SizedBox(height: 8),
                         _buildDirectiveRow(
@@ -1543,8 +1572,10 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                 ),
 
                 // [!] "정산 완료" 버튼 항상 표시되도록 수정 (수동 정산)
+                // [!] 로직 4: "정산 완료" 버튼 (0주 && 1회 이상 거래) 조건으로 수정
                 if (!isManuallyCompleted &&
-                    (currentQuantity_A + currentQuantity_B) > 0)
+                    (currentQuantity_A + currentQuantity_B) == 0 &&
+                    tValue > 0)
                   Padding(
                     padding: const EdgeInsets.only(top: 24.0),
                     child: OutlinedButton(
@@ -1554,7 +1585,7 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                         foregroundColor: Colors.blue.shade700,
                         side: BorderSide(color: Colors.blue.shade700),
                       ),
-                      child: const Text('정산완료하기 (수동)'), // [!] 텍스트 고정
+                      child: const Text('정산완료하기 (수동)'),
                     ),
                   ),
               ],
