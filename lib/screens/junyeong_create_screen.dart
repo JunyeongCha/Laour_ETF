@@ -25,12 +25,12 @@ class _JunyeongCreateScreenState extends State<JunyeongCreateScreen> {
 
   bool _isLoading = false;
 
-  // (★2-2단계 수정★) ACE, PLUS 종목 추가
+  // [!] Step 4.1 + 6: 4개 종목으로 리스트 수정 (PLUS 제외, TIGER(합성) 추가)
   final List<String> _junyeongItems = [
     'TIGER 미국필라델피아반도체레버리지',
     'KODEX 미국나스닥100레버리지',
-    'PLUS 미국테크TOP10레버리지',
-    'ACE 미국빅테크TOP7 PLUS레버리지'
+    'TIGER 미국나스닥100레버리지(합성)', // [!] 신규 추가
+    'ACE 미국빅테크TOP7 Plus레버리지'
   ];
   String? _selectedJunyeongItem;
 
@@ -67,25 +67,26 @@ class _JunyeongCreateScreenState extends State<JunyeongCreateScreen> {
       // (★2-2단계 수정★) k-Factor 할당 로직 확장
       double kMin, kMax, kAvg;
       if (_selectedJunyeongItem == 'TIGER 미국필라델피아반도체레버리지') {
-        kMin = 2.68; 
-        kMax = 3.69; 
-        kAvg = 3.185; 
+        kMin = 0.2589;
+        kMax = 0.9843;
+        kAvg = 0.5703;
       } else if (_selectedJunyeongItem == 'KODEX 미국나스닥100레버리지') {
-        kMin = 3.47; 
-        kMax = 3.53; 
-        kAvg = 3.50; 
-      } else if (_selectedJunyeongItem == 'PLUS 미국테크TOP10레버리지' ||
-                 _selectedJunyeongItem == 'ACE 미국빅테크TOP7 PLUS레버리지') {
-        // (★2-2단계★) 요청사항: ACE와 PLUS는 KODEX 값을 임시로 사용
-        // TODO: 6단계에서 이 종목들의 k-Factor 확정 필요
-        kMin = 3.47; 
-        kMax = 3.53; 
-        kAvg = 3.50; 
+        kMin = 0.3089;
+        kMax = 0.7087;
+        kAvg = 0.5531;
+      } else if (_selectedJunyeongItem == 'TIGER 미국나스닥100레버리지(합성)') {
+        kMin = 0.4412;
+        kMax = 0.8830;
+        kAvg = 0.6621;
+      } else if (_selectedJunyeongItem == 'ACE 미국빅테크TOP7 Plus레버리지') {
+        kMin = 0.4000;
+        kMax = 0.9037;
+        kAvg = 0.6512;
       } else {
-        // (임시) TIGER 필반 값 사용 (위 리스트 외의 값이 들어올 경우 대비)
-        kMin = 2.68;
-        kMax = 3.69;
-        kAvg = 3.185;
+        // (임시) KODEX 값 사용 (위 리스트 외의 값이 들어올 경우 대비)
+        kMin = 0.3089;
+        kMax = 0.7087;
+        kAvg = 0.5531;
       }
 
       final Map<String, dynamic> cycleData = {

@@ -62,10 +62,21 @@ class CycleCard extends StatelessWidget {
     final String name = data['name'] ?? '이름 없음';
     final String nickname = data['nickname'] ?? '';
     final double totalSeed = (data['totalSeed'] as num?)?.toDouble() ?? 1.0;
-    final double targetProfitRate =
-        (data['targetProfitRate'] as num?)?.toDouble() ?? 0.0;
+    
+    // [!] (Bug Fix) 'targetProfitRate'는 '무매' 전용. '준영'은 동적 계산 필요.
     final double currentPrice =
         (data['currentPrice'] as num?)?.toDouble() ?? 0.0;
+    
+    // '준영' 타입일 경우 kAvg와 3x값을 읽어옴
+    double targetProfitRate; 
+    if (cycleType == 'junyeong') {
+      final double kAvg = (data['kAvg'] as num?)?.toDouble() ?? 3.185; // (임시 기본값)
+      final double targetProfitRate_3x = (data['targetProfitRate_3x'] as num?)?.toDouble() ?? 0.0;
+      targetProfitRate = targetProfitRate_3x * kAvg; // [!] 동적 계산
+    } else {
+      // '무매'는 기존 값 사용
+      targetProfitRate = (data['targetProfitRate'] as num?)?.toDouble() ?? 0.0;
+    }
 
     // 표시할 변수 초기화
     double displayAvgPrice = 0.0;
@@ -99,8 +110,7 @@ class CycleCard extends StatelessWidget {
     }
 
     // (★1단계 수정★) home_screen과 동일한 정산 완료 로직
-    final bool isCompleted =
-        isManuallyCompleted || (displayQuantity == 0 && displayPurchaseAmount > 0);
+    final bool isCompleted = isManuallyCompleted;
 
     double finalProfitAmount = 0.0;
     double finalProfitRate = 0.0;
@@ -373,12 +383,18 @@ class CycleCard extends StatelessWidget {
                                   valueColor: currentProfitColor,
                                   textColor: textColor,
                                   subTextColor: subTextColor),
+                              _buildInfoRow( // [!] "총 실현 손익" 추가
+                                  '총 실현 손익:',
+                                  '${displayRealizedProfit.toStringAsFixed(0)} 원',
+                                  valueColor: displayRealizedProfit >= 0 ? Colors.red : Colors.blue.shade700,
+                                  textColor: textColor,
+                                  subTextColor: subTextColor),
                               const Divider(height: 16),
                               _buildInfoRow(
-                                  '목표 수익률:',
+                                '목표 수익률:',
                                   (cycleType == 'junyeong')
-                                      ? '$targetProfitRate % (Track A)'
-                                      : '$targetProfitRate %',
+                                      ? '${targetProfitRate.toStringAsFixed(2)} % (Track A)' // [!] 포맷팅 수정
+                                      : '${targetProfitRate.toStringAsFixed(2)} %', // [!] 포맷팅 수정
                                   textColor: textColor,
                                   subTextColor: subTextColor),
                               _buildInfoRow(

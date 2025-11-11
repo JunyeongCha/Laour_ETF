@@ -1,3 +1,4 @@
+//cycle_completed_screen.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart'; // (★신규★) 2번
@@ -17,13 +18,28 @@ class CycleCompletedScreen extends StatelessWidget {
     final Color textColor = isDarkMode ? Colors.white : Colors.black;
     final Color subTextColor = isDarkMode ? Colors.white70 : Colors.grey.shade700;
 
-    // 1. 데이터 추출
+// 1. 데이터 추출
     final String name = cycleData['name'] ?? '이름 없음';
     final int tValue = (cycleData['T_value'] as num?)?.toInt() ?? 0;
     
-    final double totalPurchaseAmount = (cycleData['currentPurchaseAmount'] as num?)?.toDouble() ?? 0.0;
-    final double totalSellAmount = (cycleData['totalSellAmount'] as num?)?.toDouble() ?? 0.0;
-    final double finalProfitAmount = (cycleData['realizedProfit'] as num?)?.toDouble() ?? 0.0; 
+    // [Bug 7] 'junyeong' 타입일 때 A/B 합산
+    final String cycleType = cycleData['type'] ?? 'mumae';
+    double totalPurchaseAmount;
+    double totalSellAmount;
+    double finalProfitAmount;
+
+    if (cycleType == 'junyeong') {
+      totalPurchaseAmount = ((cycleData['currentPurchaseAmount_A'] as num?)?.toDouble() ?? 0.0) +
+          ((cycleData['currentPurchaseAmount_B'] as num?)?.toDouble() ?? 0.0);
+      totalSellAmount = ((cycleData['totalSellAmount_A'] as num?)?.toDouble() ?? 0.0) +
+          ((cycleData['totalSellAmount_B'] as num?)?.toDouble() ?? 0.0);
+      finalProfitAmount = ((cycleData['realizedProfit_A'] as num?)?.toDouble() ?? 0.0) +
+          ((cycleData['realizedProfit_B'] as num?)?.toDouble() ?? 0.0);
+    } else {
+      totalPurchaseAmount = (cycleData['currentPurchaseAmount'] as num?)?.toDouble() ?? 0.0;
+      totalSellAmount = (cycleData['totalSellAmount'] as num?)?.toDouble() ?? 0.0;
+      finalProfitAmount = (cycleData['realizedProfit'] as num?)?.toDouble() ?? 0.0;
+    }
 
     // 3. 최종 수익/수익률 계산
     final double finalProfitRate = (totalPurchaseAmount == 0)

@@ -184,7 +184,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             }
 
             // (★수정된 로직★)
-            if (isManuallyCompleted || (quantity == 0 && purchaseAmount > 0)) {
+            if (isManuallyCompleted) {
               completedCycles.add(doc);
             } else {
               ongoingCycles.add(doc);
