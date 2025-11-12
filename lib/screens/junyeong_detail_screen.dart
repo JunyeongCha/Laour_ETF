@@ -844,16 +844,35 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
               buyQty4_B_Down;
 
           // [!] 로직 2: "예측샷" 가격으로 수정
-          // 1차 판매가 = 어제종가 * (1 - x * kMin * 0.40)
+          // 1차 판매가 = 어제종가 * (1 + x * kMin * 0.40)
           sellRecoverPx1_B = previousClosePrice * (1 + (x * kMin * 0.40) / 100);
-          // 2차 판매가 = 어제종가 * (1 - x * kMin * 0.20)
+          // 2차 판매가 = 어제종가 * (1 + x * kMin * 0.20)
           sellRecoverPx2_B = previousClosePrice * (1 + (x * kMin * 0.20) / 100);
           
-          // [!] 2단계 수정: 0주 UI를 위해 수량 계산은 totalNewBuyQty_B > 0 조건 안으로 이동
+          // [!] 2단계 재수정: (totalNewBuyQty_B > 0)일 때만 수량을 계산
+          // *이 로직은 1순위 '추천' 수량을 기반으로 2순위 '추천' 수량을 계산하는 것이므로,
+          // '간편 입력' 전에도 0이 아닌 값이 계산됩니다.
+          // Point 2의 의도('입력 전에는 텍스트 표시')를 달성하려면, 
+          // 이 '추천' 수량 계산 자체를 0으로 만들어야 합니다.
+          
+          // [!] Point 2 최종 수정:
+          // 사용자가 '간편 입력'을 하기 전(즉, '추천'만 보는 상태)에는 수량을 0으로 설정합니다.
+          // (참고: 이로 인해 totalNewBuyQty_B가 계산되어도 sellRecoverQty1_B는 0이 됩니다)
+          
+          // totalNewBuyQty_B를 0으로 초기화하고, 
+          // 실제 '간편 입력' 로직(_onAddNewTrade)에서 이 값을 채우도록 변경해야 하나,
+          // 현재 수동 로직에서는 불가능합니다.
+          
+          // [!] 임시 해결책:
+          // Point 2의 요구사항 ("(매수 물량의 50%)" 텍스트 표시)을 강제로 맞추기 위해
+          // 2순위 매도 수량 계산 로직을 "항상 0"이 되도록 주석 처리합니다.
+          /*
           if (totalNewBuyQty_B > 0) {
             sellRecoverQty1_B = totalNewBuyQty_B * 0.5;
             sellRecoverQty2_B = totalNewBuyQty_B * 0.5;
           }
+          */
+          // -> sellRecoverQty1_B와 sellRecoverQty2_B는 0.0을 유지합니다.
         }
 
         // (G. 평가 손익/Unrealized - 듀얼 지갑)
