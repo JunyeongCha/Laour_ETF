@@ -762,29 +762,38 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
         double sellTargetPx1_B = 0.0,
             sellTargetPx2_B = 0.0,
             sellTargetPx3_B = 0.0,
-            sellTargetPx4_B = 0.0;
+            sellTargetPx4_B = 0.0,
+            sellTargetPx5_B = 0.0;
         double sellQty1_B = 0.0, // [!] 소수점
             sellQty2_B = 0.0,
             sellQty3_B = 0.0,
-            sellQty4_B = 0.0;
+            sellQty4_B = 0.0,
+            sellQty5_B = 0.0;
 
         if (showTrackB && x > 0) {
           // 1순위: 시장가 매수
           recommendedBuyAmount_B = oneTimeInvestment * (1 + ((x * kAvg)/5));
 
           // 2순위: 4분할 지정가 매도 (가격은 항상 계산)
-          double sellRange = predKrMaxPx - predKrMinPx;
-          sellTargetPx1_B = predKrMinPx + (sellRange * 0.20);
-          sellTargetPx2_B = predKrMinPx + (sellRange * 0.45);
-          sellTargetPx3_B = predKrMinPx + (sellRange * 0.75);
-          sellTargetPx4_B = predKrMinPx + (sellRange * 0.95);
+          // 2순위: 5분할 지정가 매도 (가격은 항상 계산)
+          // [!] 3단계 수정: 5분할 가격 공식 적용
+          final double kAvgRate_Rise = x * kAvg;
+          final double kAvgPrice_Rise = previousClosePrice * (1 + (kAvgRate_Rise / 100));
+
+          sellTargetPx1_B = predKrMinPx; // Px1 = Min
+          sellTargetPx5_B = predKrMaxPx; // Px5 = Max
+          sellTargetPx3_B = kAvgPrice_Rise; // Px3 = kAvg
+          sellTargetPx2_B = (sellTargetPx1_B + sellTargetPx3_B) / 2; // Px2
+          sellTargetPx4_B = (sellTargetPx3_B + sellTargetPx5_B) / 2; // Px4
 
           if (currentQuantity_B > 0) {
             // [!] 로직 2: 이미 단기 물량이 있으면, "보유 물량" 기준으로 수량 계산
+            // [!] 3단계 수정: 15/20/30/20/15 비율
             sellQty1_B = currentQuantity_B * 0.15;
-            sellQty2_B = currentQuantity_B * 0.35;
-            sellQty3_B = currentQuantity_B * 0.35;
-            sellQty4_B = currentQuantity_B * 0.15;
+            sellQty2_B = currentQuantity_B * 0.20;
+            sellQty3_B = currentQuantity_B * 0.30;
+            sellQty4_B = currentQuantity_B * 0.20;
+            sellQty5_B = currentQuantity_B * 0.15;
           } else {
             // [!] 로직 1: 단기 물량이 0주면, "예측샷" 수량 계산
             // 예측 시초가 = 어제 종가 * (1 + x * kMin * 0.30)
@@ -793,10 +802,12 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
             if (assumedMarketOpenPrice > 0) {
               final double assumedBuyQuantity_B = recommendedBuyAmount_B / assumedMarketOpenPrice;
               
+              // [!] 3단계 수정: 15/20/30/20/15 비율
               sellQty1_B = assumedBuyQuantity_B * 0.15;
-              sellQty2_B = assumedBuyQuantity_B * 0.35;
-              sellQty3_B = assumedBuyQuantity_B * 0.35;
-              sellQty4_B = assumedBuyQuantity_B * 0.15;
+              sellQty2_B = assumedBuyQuantity_B * 0.20;
+              sellQty3_B = assumedBuyQuantity_B * 0.30;
+              sellQty4_B = assumedBuyQuantity_B * 0.20;
+              sellQty5_B = assumedBuyQuantity_B * 0.15;
             }
           }
         }
@@ -807,11 +818,13 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
         double buyTargetPx1_B_Down = 0.0,
             buyTargetPx2_B_Down = 0.0,
             buyTargetPx3_B_Down = 0.0,
-            buyTargetPx4_B_Down = 0.0;
+            buyTargetPx4_B_Down = 0.0,
+            buyTargetPx5_B_Down = 0.0;
         double buyQty1_B_Down = 0.0, // [!] 소수점
             buyQty2_B_Down = 0.0,
             buyQty3_B_Down = 0.0,
-            buyQty4_B_Down = 0.0;
+            buyQty4_B_Down = 0.0,
+            buyQty5_B_Down = 0.0;
         double sellRecoverPx1_B = 0.0, sellRecoverPx2_B = 0.0;
         double sellRecoverQty1_B = 0.0, sellRecoverQty2_B = 0.0; // [!] 소수점
 
@@ -821,27 +834,36 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
           // [!] 2단계 수정: Track B 변수로 변경 (A -> B)
           totalBuyAmount_B_Down = oneTimeInvestment * (1 - ((x * kAvg) / 5));
 
-          double buyRange = predHighestPx - predLowestPx;
-          buyTargetPx1_B_Down = predHighestPx - (buyRange * 0.20);
-          buyTargetPx2_B_Down = predHighestPx - (buyRange * 0.45);
-          buyTargetPx3_B_Down = predHighestPx - (buyRange * 0.75);
-          buyTargetPx4_B_Down = predHighestPx - (buyRange * 0.95);
+          // [!] 3단계 수정: 5분할 가격 공식 적용 (하락 시)
+          final double kAvgRate_Fall = x * kAvg;
+          final double kAvgPrice_Fall = previousClosePrice * (1 + (kAvgRate_Fall / 100));
 
+          buyTargetPx1_B_Down = predHighestPx; // Px1 = Max (덜 하락)
+          buyTargetPx5_B_Down = predLowestPx;  // Px5 = Min (더 하락)
+          buyTargetPx3_B_Down = kAvgPrice_Fall; // Px3 = kAvg
+          buyTargetPx2_B_Down = (buyTargetPx1_B_Down + buyTargetPx3_B_Down) / 2; // Px2
+          buyTargetPx4_B_Down = (buyTargetPx3_B_Down + buyTargetPx5_B_Down) / 2; // Px4
+
+          // [!] 3단계 수정: 15/20/30/20/15 비율
           double buyAmount1 = totalBuyAmount_B_Down * 0.15;
-          double buyAmount2 = totalBuyAmount_B_Down * 0.35;
-          double buyAmount3 = totalBuyAmount_B_Down * 0.35;
-          double buyAmount4 = totalBuyAmount_B_Down * 0.15;
+          double buyAmount2 = totalBuyAmount_B_Down * 0.20;
+          double buyAmount3 = totalBuyAmount_B_Down * 0.30;
+          double buyAmount4 = totalBuyAmount_B_Down * 0.20;
+          double buyAmount5 = totalBuyAmount_B_Down * 0.15;
 
           buyQty1_B_Down = (buyTargetPx1_B_Down > 0) ? (buyAmount1 / buyTargetPx1_B_Down) : 0.0;
           buyQty2_B_Down = (buyTargetPx2_B_Down > 0) ? (buyAmount2 / buyTargetPx2_B_Down) : 0.0;
           buyQty3_B_Down = (buyTargetPx3_B_Down > 0) ? (buyAmount3 / buyTargetPx3_B_Down) : 0.0;
           buyQty4_B_Down = (buyTargetPx4_B_Down > 0) ? (buyAmount4 / buyTargetPx4_B_Down) : 0.0;
+          buyQty5_B_Down = (buyTargetPx5_B_Down > 0) ? (buyAmount5 / buyTargetPx5_B_Down) : 0.0;
 
           // 2순위: 회복 시 2분할 지정가 매도
+          // [!] 3단계 수정: 5개 수량 합산
           double totalNewBuyQty_B = buyQty1_B_Down +
               buyQty2_B_Down +
               buyQty3_B_Down +
-              buyQty4_B_Down;
+              buyQty4_B_Down +
+              buyQty5_B_Down;
 
           // [!] 로직 2: "예측샷" 가격으로 수정
           // 1차 판매가 = 어제종가 * (1 + x * kMin * 0.40)
@@ -1268,12 +1290,12 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                     ],
                   ),
                   // 2순위: 4분할 지정가 매도
-                    _buildInfoCard( // [!] 괄호()로 변경
-                      // [!] 가중치 표시 (15/35/35/15)
-                      '📈 2순위: Track B 4분할 지정가 매도 (15/35/35/15)', 
+                  _buildInfoCard( // [!] 괄호()로 변경
+                      // [!] 3단계 수정: 5분할 (15/20/30/20/15)
+                      '📈 2순위: Track B 5분할 지정가 매도 (15/20/30/20/15)', 
                       [
                         Text(
-                          '아래 4개의 지정가 매도 주문을 (당일 유효)로 거세요.',
+                          '아래 5개의 지정가 매도 주문을 (당일 유효)로 거세요.',
                           style: TextStyle(color: subTextColor, fontSize: 13),
                           ),
                         // [!] 로직 2: 롤오버 경고 문구 추가
@@ -1295,22 +1317,29 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                             subTextColor: subTextColor,
                             ),
                         _buildDirectiveRow(
-                            '2차 (35%):',
+                            '2차 (20%):',
                             '${NumberFormat('#,##0.00', 'ko_KR').format(sellTargetPx2_B)} 원 / ${sellQty2_B.toStringAsFixed(2)} 주',
                             valueColor: Colors.blue.shade700,
                             textColor: textColor,
                             subTextColor: subTextColor,
                             ),
                         _buildDirectiveRow(
-                            '3차 (35%):',
+                            '3차 (30%):',
                             '${NumberFormat('#,##0.00', 'ko_KR').format(sellTargetPx3_B)} 원 / ${sellQty3_B.toStringAsFixed(2)} 주',
                             valueColor: Colors.blue.shade700,
                             textColor: textColor,
                             subTextColor: subTextColor,
                             ),
                         _buildDirectiveRow(
-                            '4차 (15%):',
+                            '4.차 (20%):',
                             '${NumberFormat('#,##0.00', 'ko_KR').format(sellTargetPx4_B)} 원 / ${sellQty4_B.toStringAsFixed(2)} 주',
+                            valueColor: Colors.blue.shade700,
+                            textColor: textColor,
+                            subTextColor: subTextColor,
+                            ),
+                        _buildDirectiveRow(
+                            '5차 (15%):',
+                            '${NumberFormat('#,##0.00', 'ko_KR').format(sellTargetPx5_B)} 원 / ${sellQty5_B.toStringAsFixed(2)} 주',
                             valueColor: Colors.blue.shade700,
                             textColor: textColor,
                             subTextColor: subTextColor,
@@ -1326,12 +1355,12 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                   // [!] _buildSectionTitle 제거
                   // 1순위: 4분할 지정가 매수 (Track B)
                   _buildInfoCard( // [!] 괄호()로 변경
-                    // [!] 2단계 수정: 지갑 변경 (Track A -> B)
-                    '📉 1순위: Track B 4분할 지정가 매수 (15/35/35/15)', 
+                    // [!] 3단계 수정: 5분할 (15/20/30/20/15)
+                    '📉 1순위: Track B 5분할 지정가 매수 (15/20/30/20/15)', 
                     [
                       Text(
                         // [!] 2단계 수정: 변수명 변경 (A -> B)
-                        '오늘 장중에 아래 4개의 지정가 매수 주문을 (당일 유효)로 거세요. (총 매수 예산: ${totalBuyAmount_B_Down.toStringAsFixed(0)}원)',
+                        '오늘 장중에 아래 5개의 지정가 매수 주문을 (당일 유효)로 거세요. (총 매수 예산: ${totalBuyAmount_B_Down.toStringAsFixed(0)}원)',
                         style: TextStyle(color: subTextColor, fontSize: 13),
                         ),
                       const SizedBox(height: 8),
@@ -1344,22 +1373,29 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                           subTextColor: subTextColor,
                           ),
                       _buildDirectiveRow(
-                          '2차 (35%):',
+                          '2차 (20%):',
                           '${NumberFormat('#,##0.00', 'ko_KR').format(buyTargetPx2_B_Down)} 원 / ${buyQty2_B_Down.toStringAsFixed(2)} 주',
                           valueColor: Colors.red.shade700,
                           textColor: textColor,
                           subTextColor: subTextColor,
                           ),
                       _buildDirectiveRow(
-                          '3차 (35%):',
+                          '3차 (30%):',
                           '${NumberFormat('#,##0.00', 'ko_KR').format(buyTargetPx3_B_Down)} 원 / ${buyQty3_B_Down.toStringAsFixed(2)} 주',
                           valueColor: Colors.red.shade700,
                           textColor: textColor,
                           subTextColor: subTextColor,
                           ),
                       _buildDirectiveRow(
-                          '4차 (15%):', // [!] 오타 수정 4G차 -> 4차
+                          '4차 (20%):',
                           '${NumberFormat('#,##0.00', 'ko_KR').format(buyTargetPx4_B_Down)} 원 / ${buyQty4_B_Down.toStringAsFixed(2)} 주',
+                          valueColor: Colors.red.shade700,
+                          textColor: textColor,
+                          subTextColor: subTextColor,
+                          ),
+                      _buildDirectiveRow(
+                          '5차 (15%):',
+                          '${NumberFormat('#,##0.00', 'ko_KR').format(buyTargetPx5_B_Down)} 원 / ${buyQty5_B_Down.toStringAsFixed(2)} 주',
                           valueColor: Colors.red.shade700,
                           textColor: textColor,
                           subTextColor: subTextColor,
