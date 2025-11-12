@@ -802,53 +802,57 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
         }
 
         // Case 2: 3% 초과 하락
-        double totalBuyAmount_A_Down = 0.0;
-        double buyTargetPx1_A_Down = 0.0,
-            buyTargetPx2_A_Down = 0.0,
-            buyTargetPx3_A_Down = 0.0,
-            buyTargetPx4_A_Down = 0.0;
-        double buyQty1_A_Down = 0.0, // [!] 소수점
-            buyQty2_A_Down = 0.0,
-            buyQty3_A_Down = 0.0,
-            buyQty4_A_Down = 0.0;
-        double sellRecoverPx1 = 0.0, sellRecoverPx2 = 0.0;
-        double sellRecoverQty1 = 0.0, sellRecoverQty2 = 0.0; // [!] 소수점
+        // [!] 2단계 수정: Track B 변수로 변경 (A -> B)
+        double totalBuyAmount_B_Down = 0.0;
+        double buyTargetPx1_B_Down = 0.0,
+            buyTargetPx2_B_Down = 0.0,
+            buyTargetPx3_B_Down = 0.0,
+            buyTargetPx4_B_Down = 0.0;
+        double buyQty1_B_Down = 0.0, // [!] 소수점
+            buyQty2_B_Down = 0.0,
+            buyQty3_B_Down = 0.0,
+            buyQty4_B_Down = 0.0;
+        double sellRecoverPx1_B = 0.0, sellRecoverPx2_B = 0.0;
+        double sellRecoverQty1_B = 0.0, sellRecoverQty2_B = 0.0; // [!] 소수점
 
         if (showTrackB && x < 0) {
-          // 1순위: 4분할 지정가 매수 (Track A)
-          totalBuyAmount_A_Down = oneTimeInvestment * (1 - ((x * kAvg)/ 5));
+          // 1순위: 4분할 지정가 매수 (Track B)
+          // [!] 1단계 수정: 폭락 시 매수 금액 공식 완화 (/ 5)
+          // [!] 2단계 수정: Track B 변수로 변경 (A -> B)
+          totalBuyAmount_B_Down = oneTimeInvestment * (1 - ((x * kAvg) / 5));
 
           double buyRange = predHighestPx - predLowestPx;
-          buyTargetPx1_A_Down = predHighestPx - (buyRange * 0.20);
-          buyTargetPx2_A_Down = predHighestPx - (buyRange * 0.45);
-          buyTargetPx3_A_Down = predHighestPx - (buyRange * 0.75);
-          buyTargetPx4_A_Down = predHighestPx - (buyRange * 0.95);
+          buyTargetPx1_B_Down = predHighestPx - (buyRange * 0.20);
+          buyTargetPx2_B_Down = predHighestPx - (buyRange * 0.45);
+          buyTargetPx3_B_Down = predHighestPx - (buyRange * 0.75);
+          buyTargetPx4_B_Down = predHighestPx - (buyRange * 0.95);
 
-          double buyAmount1 = totalBuyAmount_A_Down * 0.15;
-          double buyAmount2 = totalBuyAmount_A_Down * 0.35;
-          double buyAmount3 = totalBuyAmount_A_Down * 0.35;
-          double buyAmount4 = totalBuyAmount_A_Down * 0.15;
+          double buyAmount1 = totalBuyAmount_B_Down * 0.15;
+          double buyAmount2 = totalBuyAmount_B_Down * 0.35;
+          double buyAmount3 = totalBuyAmount_B_Down * 0.35;
+          double buyAmount4 = totalBuyAmount_B_Down * 0.15;
 
-          buyQty1_A_Down = (buyTargetPx1_A_Down > 0) ? (buyAmount1 / buyTargetPx1_A_Down) : 0.0;
-          buyQty2_A_Down = (buyTargetPx2_A_Down > 0) ? (buyAmount2 / buyTargetPx2_A_Down) : 0.0;
-          buyQty3_A_Down = (buyTargetPx3_A_Down > 0) ? (buyAmount3 / buyTargetPx3_A_Down) : 0.0;
-          buyQty4_A_Down = (buyTargetPx4_A_Down > 0) ? (buyAmount4 / buyTargetPx4_A_Down) : 0.0;
+          buyQty1_B_Down = (buyTargetPx1_B_Down > 0) ? (buyAmount1 / buyTargetPx1_B_Down) : 0.0;
+          buyQty2_B_Down = (buyTargetPx2_B_Down > 0) ? (buyAmount2 / buyTargetPx2_B_Down) : 0.0;
+          buyQty3_B_Down = (buyTargetPx3_B_Down > 0) ? (buyAmount3 / buyTargetPx3_B_Down) : 0.0;
+          buyQty4_B_Down = (buyTargetPx4_B_Down > 0) ? (buyAmount4 / buyTargetPx4_B_Down) : 0.0;
 
           // 2순위: 회복 시 2분할 지정가 매도
-          double totalNewBuyQty = buyQty1_A_Down +
-              buyQty2_A_Down +
-              buyQty3_A_Down +
-              buyQty4_A_Down;
+          double totalNewBuyQty_B = buyQty1_B_Down +
+              buyQty2_B_Down +
+              buyQty3_B_Down +
+              buyQty4_B_Down;
 
-          if (totalNewBuyQty > 0) {
-            // [!] 로직 2: "예측샷" 가격으로 수정
-            // 1차 판매가 = 어제종가 * (1 - x * kMin * 0.40)
-            sellRecoverPx1 = previousClosePrice * (1 + (x * kMin * 0.40) / 100);
-            // 2차 판매가 = 어제종가 * (1 - x * kMin * 0.20)
-            sellRecoverPx2 = previousClosePrice * (1 + (x * kMin * 0.20) / 100);
-            
-            sellRecoverQty1 = totalNewBuyQty * 0.5;
-            sellRecoverQty2 = totalNewBuyQty * 0.5;
+          // [!] 로직 2: "예측샷" 가격으로 수정
+          // 1차 판매가 = 어제종가 * (1 - x * kMin * 0.40)
+          sellRecoverPx1_B = previousClosePrice * (1 + (x * kMin * 0.40) / 100);
+          // 2차 판매가 = 어제종가 * (1 - x * kMin * 0.20)
+          sellRecoverPx2_B = previousClosePrice * (1 + (x * kMin * 0.20) / 100);
+          
+          // [!] 2단계 수정: 0주 UI를 위해 수량 계산은 totalNewBuyQty_B > 0 조건 안으로 이동
+          if (totalNewBuyQty_B > 0) {
+            sellRecoverQty1_B = totalNewBuyQty_B * 0.5;
+            sellRecoverQty2_B = totalNewBuyQty_B * 0.5;
           }
         }
 
@@ -1297,43 +1301,46 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                 ],
 
                 // [!] Case 2: 3% 초과 하락 시
+                // [!] Case 2: 3% 초과 하락 시
+                // [!] Case 2: 3% 초과 하락 시
                 if (showTrackB && x < 0) ...[
                   // [!] _buildSectionTitle 제거
-                  // 1순위: 4분할 지정가 매수 (Track A)
+                  // 1순위: 4분할 지정가 매수 (Track B)
                   _buildInfoCard( // [!] 괄호()로 변경
-                    // [!] 지갑 변경 (Track A), 가중치 표시
-                    '📉 1순위: Track A 4분할 지정가 매수 (15/35/35/15)', 
+                    // [!] 2단계 수정: 지갑 변경 (Track A -> B)
+                    '📉 1순위: Track B 4분할 지정가 매수 (15/35/35/15)', 
                     [
                       Text(
-                        '오늘 장중에 아래 4개의 지정가 매수 주문을 (당일 유효)로 거세요. (총 매수 예산: ${totalBuyAmount_A_Down.toStringAsFixed(0)}원)',
+                        // [!] 2단계 수정: 변수명 변경 (A -> B)
+                        '오늘 장중에 아래 4개의 지정가 매수 주문을 (당일 유효)로 거세요. (총 매수 예산: ${totalBuyAmount_B_Down.toStringAsFixed(0)}원)',
                         style: TextStyle(color: subTextColor, fontSize: 13),
                         ),
                       const SizedBox(height: 8),
                       _buildDirectiveRow(
                           '1차 (15%):',
-                          // [!] 소수점 표시
-                          '${NumberFormat('#,##0.00', 'ko_KR').format(buyTargetPx1_A_Down)} 원 / ${buyQty1_A_Down.toStringAsFixed(2)} 주',
+                          // [!] 2단계 수정: 변수명 변경 (A -> B)
+                          '${NumberFormat('#,##0.00', 'ko_KR').format(buyTargetPx1_B_Down)} 원 / ${buyQty1_B_Down.toStringAsFixed(2)} 주',
                           valueColor: Colors.red.shade700,
                           textColor: textColor,
                           subTextColor: subTextColor,
                           ),
                       _buildDirectiveRow(
                           '2차 (35%):',
-                          '${NumberFormat('#,##0.00', 'ko_KR').format(buyTargetPx2_A_Down)} 원 / ${buyQty2_A_Down.toStringAsFixed(2)} 주',
+                          '${NumberFormat('#,##0.00', 'ko_KR').format(buyTargetPx2_B_Down)} 원 / ${buyQty2_B_Down.toStringAsFixed(2)} 주',
                           valueColor: Colors.red.shade700,
                           textColor: textColor,
                           subTextColor: subTextColor,
                           ),
                       _buildDirectiveRow(
                           '3차 (35%):',
-                          '${NumberFormat('#,##0.00', 'ko_KR').format(buyTargetPx3_A_Down)} 원 / ${buyQty3_A_Down.toStringAsFixed(2)} 주',
+                          '${NumberFormat('#,##0.00', 'ko_KR').format(buyTargetPx3_B_Down)} 원 / ${buyQty3_B_Down.toStringAsFixed(2)} 주',
                           valueColor: Colors.red.shade700,
                           textColor: textColor,
                           subTextColor: subTextColor,
                           ),
                       _buildDirectiveRow(
                           '4차 (15%):', // [!] 오타 수정 4G차 -> 4차
-                          '${NumberFormat('#,##0.00', 'ko_KR').format(buyTargetPx4_A_Down)} 원 / ${buyQty4_A_Down.toStringAsFixed(2)} 주',
+                          '${NumberFormat('#,##0.00', 'ko_KR').format(buyTargetPx4_B_Down)} 원 / ${buyQty4_B_Down.toStringAsFixed(2)} 주',
                           valueColor: Colors.red.shade700,
                           textColor: textColor,
                           subTextColor: subTextColor,
@@ -1341,32 +1348,45 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                     ],
                   ),
                   // 2순위: 회복 시 2분할 지정가 매도
-                  if (sellRecoverQty1 > 0)
-                    _buildInfoCard( // [!] 괄호()로 변경
-                      // [!] 신규 로직
-                      '📉 2순위: Track A 회복시 2분할 지정가 매도 (어제 종가 부근)', 
-                      [
-                        Text(
-                        '1순위 매수와 함께, 단기 반등을 위한 매도 주문을 (당일 유효)로 거세요.',
-                        style: TextStyle(color: subTextColor, fontSize: 13),
+                  // 2순위: 회복 시 2분할 지정가 매도
+                  _buildInfoCard( // [!] 괄호()로 변경
+                    // [!] 2단계 수정: 지갑 변경 (Track A -> B) 및 제목 수정
+                    '📉 2순위: Track B 회복시 2분할 지정가 매도', 
+                    [
+                      Text(
+                      '1순위 매수와 함께, 단기 반등을 위한 매도 주문을 (당일 유효)로 거세요.',
+                      style: TextStyle(color: subTextColor, fontSize: 13),
+                      ),
+                      // [!] 2단계 수정: 롤오버 안내 문구 추가
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4.0),
+                        child: Text(
+                          '(미체결 시 익일 롤오버 권장)',
+                          style: TextStyle(color: Colors.orange.shade700, fontSize: 12, fontWeight: FontWeight.bold),
                         ),
-                        const SizedBox(height: 8),
-                        _buildDirectiveRow(
-                            '1차 (50%):',
-                            '${NumberFormat('#,##0.00', 'ko_KR').format(sellRecoverPx1)} 원 / ${sellRecoverQty1.toStringAsFixed(2)} 주',
-                            valueColor: Colors.blue.shade700,
-                            textColor: textColor,
-                            subTextColor: subTextColor,
-                            ),
-                        _buildDirectiveRow(
-                            '2차 (50%):',
-                            '${NumberFormat('#,##0.00', 'ko_KR').format(sellRecoverPx2)} 원 / ${sellRecoverQty2.toStringAsFixed(2)} 주',
-                            valueColor: Colors.blue.shade700,
-                            textColor: textColor,
-                            subTextColor: subTextColor,
-                            ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildDirectiveRow(
+                          '1차 (50%):',
+                          // [!] 2단계 수정: 변수명 변경 및 퍼센트 표시 로직
+                          (sellRecoverQty1_B > 0)
+                            ? '${NumberFormat('#,##0.00', 'ko_KR').format(sellRecoverPx1_B)} 원 / ${sellRecoverQty1_B.toStringAsFixed(2)} 주'
+                            : '${NumberFormat('#,##0.00', 'ko_KR').format(sellRecoverPx1_B)} 원 / (매수 물량의 50%)',
+                          valueColor: Colors.blue.shade700,
+                          textColor: textColor,
+                          subTextColor: subTextColor,
+                          ),
+                      _buildDirectiveRow(
+                          '2차 (50%):',
+                          (sellRecoverQty2_B > 0)
+                            ? '${NumberFormat('#,##0.00', 'ko_KR').format(sellRecoverPx2_B)} 원 / ${sellRecoverQty2_B.toStringAsFixed(2)} 주'
+                            : '${NumberFormat('#,##0.00', 'ko_KR').format(sellRecoverPx2_B)} 원 / (매수 물량의 50%)',
+                          valueColor: Colors.blue.shade700,
+                          textColor: textColor,
+                          subTextColor: subTextColor,
+                          ),
+                    ],
+                  ),
                 ],
                 // [Bug 1, 3] 알림 로직 (올바른 위치로 이동)
                 if (buyTheDipLevel == 2) // -10% 이하
