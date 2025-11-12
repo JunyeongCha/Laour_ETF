@@ -770,7 +770,7 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
 
         if (showTrackB && x > 0) {
           // 1순위: 시장가 매수
-          recommendedBuyAmount_B = oneTimeInvestment * (1 + (x * kAvg));
+          recommendedBuyAmount_B = oneTimeInvestment * (1 + ((x * kAvg)/5));
 
           // 2순위: 4분할 지정가 매도 (가격은 항상 계산)
           double sellRange = predKrMaxPx - predKrMinPx;
@@ -816,7 +816,7 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
 
         if (showTrackB && x < 0) {
           // 1순위: 4분할 지정가 매수 (Track A)
-          totalBuyAmount_A_Down = oneTimeInvestment * (1 - (x * kAvg));
+          totalBuyAmount_A_Down = oneTimeInvestment * (1 - ((x * kAvg)/ 5));
 
           double buyRange = predHighestPx - predLowestPx;
           buyTargetPx1_A_Down = predHighestPx - (buyRange * 0.20);
