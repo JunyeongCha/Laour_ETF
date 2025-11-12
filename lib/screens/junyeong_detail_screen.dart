@@ -1031,8 +1031,20 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
 
                 // (★3단계-1★) "오늘의 예측" 카드 (신규 추가)
                 // [!] Step 6: "오늘의 예측" 카드 (새 변수명 사용)
-                _buildInfoCard( // [!] 괄호()로 변경
-                  "오늘의 예측 (Track B 기준)", 
+              // [!] 4단계: kAvg 기준 예측값 계산을 위해 Builder 위젯 추가
+              Builder(
+                builder: (context) {
+                  double kAvgRate = 0.0;
+                  double kAvgPrice = 0.0;
+                  if (x != 0 && previousClosePrice > 0) {
+                    kAvgRate = x * kAvg;
+                    kAvgPrice = previousClosePrice * (1 + (kAvgRate / 100));
+                  }
+                  
+                  // (★3단계-1★) "오늘의 예측" 카드 (신규 추가)
+                  // [!] Step 6: "오늘의 예측" 카드 (새 변수명 사용)
+                  return _buildInfoCard( // [!] 괄호()로 변경
+                    "오늘의 예측 (Track B 기준)", 
                   [
                     _buildInfoRow(
                       '예측 상승률:', 
@@ -1055,15 +1067,27 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                           ? '${predKrMinPx.toStringAsFixed(0)} 원 ~ ${predKrMaxPx.toStringAsFixed(0)} 원' // [!] 새 변수
                           : '${predLowestPx.toStringAsFixed(0)} 원 ~ ${predHighestPx.toStringAsFixed(0)} 원' // [!] 새 변수
                         ),
-                      valueColor: x > 0 ? Colors.red : (x < 0 ? Colors.blue.shade700 : textColor),
-                      textColor: textColor,
-                      subTextColor: subTextColor,
-                      valueFontSize: 15.0, 
-                    ),
-                  ]
-                ),
+                          valueColor: x > 0 ? Colors.red : (x < 0 ? Colors.blue.shade700 : textColor),
+                          textColor: textColor,
+                          subTextColor: subTextColor,
+                          valueFontSize: 15.0, 
+                        ),
+                        // [!] 4단계: kAvg 기준 (참고) 라인 추가
+                        _buildInfoRow(
+                          'kAvg 기준 (참고):', 
+                          (x == 0 || previousClosePrice == 0) ? '-' 
+                            : '${kAvgRate.toStringAsFixed(2)} % (${kAvgPrice.toStringAsFixed(0)} 원)',
+                          valueColor: x > 0 ? Colors.red.shade300 : (x < 0 ? Colors.blue.shade300 : subTextColor),
+                          textColor: textColor,
+                          subTextColor: subTextColor,
+                          valueFontSize: 13.0, // 약간 작게
+                        ),
+                      ]
+                    );
+                  }
+                  ),
 
-                // (★수정★) 평가 손익 카드 (듀얼 지갑)
+                  // (★수정★) 평가 손익 카드 (듀얼 지갑)
                 _buildInfoCard("종합 평가 손익 (Unrealized)", [
                   // (★수정★) 숫자 잘림 방지를 위해 _buildInfoRow 사용 중지
                   _buildProfitRow(
@@ -1548,12 +1572,21 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                                                   : (crashBuyAmount_A_PerLine / crashPrice);
                             
                             // (★3단계-3★) 경고 로직
+                            // (★3단계-3★) 경고 로직
                             bool showAlert = (x < 0 && predictedMinPrice > 0 && predictedMinPrice <= crashPrice);
+
+                            // [!] 5단계: (Point 4) 1주 로직 적용
+                            final String displayQty;
+                            if (crashQty < 1.0 && crashQty > 0) {
+                              displayQty = "1 주";
+                            } else {
+                              displayQty = "${crashQty.toStringAsFixed(2)} 주";
+                            }
 
                             crashBuyDirectives.add(
                               _buildDirectiveRow(
                                 '지정가 (평단*${(ratio * 100).toStringAsFixed(2)}%):', // (★3단계-1★) LOC->지정가
-                                '${crashPrice.toStringAsFixed(0)} 원 X ${crashQty.toStringAsFixed(4)} 주',
+                                '${crashPrice.toStringAsFixed(0)} 원 X $displayQty', // [!] displayQty 적용
                                 valueColor: showAlert ? Colors.red.shade900 : Colors.red.shade700, // (★3단계-3★)
                                 textColor: textColor,
                                 subTextColor: subTextColor,
@@ -1566,7 +1599,8 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                '+@ 지정가 매수(장기) (순수원금의 30% 분배)', // (★3단계-1,3★)
+                                // [!] 5단계: 이름 "폭락장"으로 되돌리기
+                                '+@ 폭락장 대비 추가 매수 (순수원금의 30% 분배)',
                                 style: TextStyle(
                                     fontWeight: FontWeight.bold, color: textColor)),
                               if (crashBuyAmount_A_Total <= 0)

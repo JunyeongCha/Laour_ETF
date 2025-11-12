@@ -727,10 +727,18 @@ class _CycleDetailScreenState extends State<CycleDetailScreen> {
                             ? 0 
                             : (crashBuyAmount_PerLine / crashPrice);
                         
+                        // [!] 5단계: (Point 4) 1주 로직 적용
+                        final String displayQty;
+                        if (crashQty < 1.0 && crashQty > 0) {
+                          displayQty = "1 주";
+                        } else {
+                          displayQty = "${crashQty.toStringAsFixed(2)} 주";
+                        }
+
                         crashBuyDirectives.add(
                           _buildDirectiveRow(
                             'LOC (평단*${(ratio * 100).toStringAsFixed(2)}%):', 
-                            '${crashPrice.toStringAsFixed(0)} 원 X ${crashQty.toStringAsFixed(4)} 주',
+                            '${crashPrice.toStringAsFixed(0)} 원 X $displayQty', // [!] displayQty 적용
                             valueColor: Colors.red.shade700, 
                             textColor: textColor, 
                             subTextColor: subTextColor
