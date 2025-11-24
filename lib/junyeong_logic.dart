@@ -63,17 +63,26 @@ class KStats {
     return KStats(min: 0.0, max: 0.0, avg: 0.0);
   }
 }
-
 // ------------------------------------------------------------------------
-// 핵심 알고리즘 2: IQR 기반 통계 산출 함수
+// 핵심 알고리즘 2: IQR 기반 통계 산출 함수 (2-3단계: 절대 필터링 추가)
 // ------------------------------------------------------------------------
 KStats getStats(List<double> rawData) {
   if (rawData.isEmpty) return KStats.empty();
 
-  // 1. 오름차순 정렬 (원본 보존을 위해 복사본 사용)
-  List<double> sortedData = List.from(rawData)..sort();
+  // [2-3단계 추가] 1. 절대 기준 필터링 (Pre-filtering)
+  // 도메인 지식 기반: 2배수 레버리지의 k값은 이론적으로 0.66 근처여야 함.
+  // 0.2 미만(괴리율 심함), 2.0 초과(이상 과열), 0 이하(음수/역주행)는 즉시 제거.
+  List<double> validData = rawData.where((val) {
+    return val >= 0.0 && val <= 2.0;
+  }).toList();
 
-  // 데이터가 너무 적으면(4개 미만) IQR 계산이 부정확하므로 그냥 전체 통계 반환
+  if (validData.isEmpty) return KStats.empty(); // 유효 데이터가 하나도 없으면 0 리턴
+
+  // 2. 오름차순 정렬
+  List<double> sortedData = List.from(validData)..sort();
+
+  // 데이터가 너무 적으면(4개 미만) IQR 계산이 부정확하므로 
+  // 절대 필터링을 통과한 값들의 전체 통계 반환
   if (sortedData.length < 4) {
     double sum = sortedData.reduce((a, b) => a + b);
     return KStats(
@@ -83,7 +92,7 @@ KStats getStats(List<double> rawData) {
     );
   }
 
-  // 2. Q1(25%), Q3(75%) 계산
+  // 3. Q1(25%), Q3(75%) 계산
   int n = sortedData.length;
   int q1Index = (n * 0.25).floor();
   int q3Index = (n * 0.75).floor();
@@ -91,19 +100,23 @@ KStats getStats(List<double> rawData) {
   double q1 = sortedData[q1Index];
   double q3 = sortedData[q3Index];
 
-  // 3. IQR 및 정상 범위(Fence) 계산
+  // 4. IQR 및 정상 범위(Fence) 계산
   double iqr = q3 - q1;
   double lowerBound = q1 - 1.5 * iqr;
   double upperBound = q3 + 1.5 * iqr;
 
-  // 4. 이상치 제거 (Filtering)
+  // 5. 이상치 제거 (IQR Filtering - Post-filter)
   List<double> filteredData = sortedData.where((val) {
     return val >= lowerBound && val <= upperBound;
   }).toList();
 
-  if (filteredData.isEmpty) return KStats.empty();
+  if (filteredData.isEmpty) {
+    // 만약 IQR 필터링으로 다 날아갔다면(극단적 상황), 
+    // 1차 필터링(절대기준) 통과한 값이라도 씁니다.
+    filteredData = sortedData; 
+  }
 
-  // 5. 최종 통계 산출
+  // 6. 최종 통계 산출
   double minVal = filteredData.first; // 이미 정렬되어 있음
   double maxVal = filteredData.last;
   double sumVal = filteredData.reduce((a, b) => a + b);

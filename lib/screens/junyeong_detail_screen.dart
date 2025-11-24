@@ -794,15 +794,15 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
         // (★3단계-2★) 1회 투자금 총액 5-Tier 동적 조절
         double totalDailyInvestment = oneTimeInvestment; // 1.0배 (기본)
         if (x < -4.5) {
-          totalDailyInvestment = oneTimeInvestment * 2.0; // 2.0배
+          totalDailyInvestment = oneTimeInvestment * 1.5; 
         } else if (x < -1.5) {
-          totalDailyInvestment = oneTimeInvestment * 1.5; // 1.5배
+          totalDailyInvestment = oneTimeInvestment * 1.2; 
         } else if (x <= 1.5) {
           totalDailyInvestment = oneTimeInvestment * 1.0; // 1.0배 (보합)
         } else if (x <= 4.5) {
-          totalDailyInvestment = oneTimeInvestment * 0.75; // 0.75배
+          totalDailyInvestment = oneTimeInvestment * 0.9; 
         } else { // x > 4.5
-          totalDailyInvestment = oneTimeInvestment * 0.4; // 0.4배
+          totalDailyInvestment = oneTimeInvestment * 0.8; 
         }
 
         // (★3단계-2★) 50:50 비중 분배
@@ -1755,19 +1755,22 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                 // --- Track B 수정 완료 ---
 
                 // --- (★3단계★) Track A: "무매" 고도화 지침 ---
-                // [!] Step 6: 용어 수정 (조건부지정가 -> 지정가)
-                _buildInfoCard( // [!] 괄호()로 변경
-                    "🔴 Track A: 지정가 매수(장기) (Star = ${starValue.toStringAsFixed(2)}%)", 
+                // --- (★3단계★) Track A: "무매" 고도화 지침 ---
+                // [수정] 4단계: 용어 변경 (지정가 -> 감시 예약)
+                _buildInfoCard(
+                    "🔴 Track A: 감시 예약 (Star = ${starValue.toStringAsFixed(2)}%)", 
                     [
                       _buildDirectiveRow(
-                        isFirstBuy_A ? '지정가(장기) 현재가 (50%):' : '지정가(장기) 평단 (50%):',
+                        // [수정] 용어 변경
+                        isFirstBuy_A ? '감시 예약(평단/현재가) (50%):' : '감시 예약(평단) (50%):',
                         '${displayAvgPrice_A.toStringAsFixed(0)} 원 X ${buyQtyAtAvg_A.toStringAsFixed(4)} 주',
                         valueColor: Colors.red.shade700,
                         textColor: textColor,
                         subTextColor: subTextColor,
                       ),
                       _buildDirectiveRow(
-                        '지정가(장기) Star% (50%):',
+                        // [수정] 용어 변경
+                        '감시 예약(Star%) (50%):',
                         '${calcBuyPrice_A.toStringAsFixed(0)} 원 X ${buyQtyAtStar_A.toStringAsFixed(4)} 주',
                         valueColor: Colors.red.shade700,
                         textColor: textColor,
@@ -1776,7 +1779,7 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                       Padding(
                         padding: const EdgeInsets.only(top: 8.0),
                         child: Text(
-                          '(오늘의 1회 투자금: ${totalDailyInvestment.toStringAsFixed(0)}원, x% 연동)',
+                          '(오늘의 1회 투자금: ${totalDailyInvestment.toStringAsFixed(0)}원, X\' 연동)',
                           style: TextStyle(fontSize: 12, color: subTextColor),
                         ),
                       ),
@@ -1786,10 +1789,7 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                       // (★3단계-3★) 폭락장 매수 로직 (순수 원금의 30%)
                       Builder(
                         builder: (context) {
-                          // (★오류 수정★) totalSellAmount_A를 double로 먼저 변환
-                          // [!] 계산 로직 블록에서 이미 선언됨 (final double totalSellAmount_A)
-                          
-                          // (★오류 수정★) 변환된 double 값으로 계산
+                          // [수정] 4단계 & 5단계: 순수 투자 원금(Net Cost)의 30% 적용
                           final double currentNetCost_A = currentPurchaseAmount_A - totalSellAmount_A;
                           final double crashBuyAmount_A_Total = currentNetCost_A * 0.30;
                           final double crashBuyAmount_A_PerLine = (crashBuyAmount_A_Total > 0) ? (crashBuyAmount_A_Total / 6.0) : 0.0;
@@ -1803,13 +1803,12 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                                                   ? 0 
                                                   : (crashBuyAmount_A_PerLine / crashPrice);
                             
-                            // (★3단계-3★) 경고 로직
-                            // (★3단계-3★) 경고 로직
+                            // 경고 로직 (하락장 && 예측 최저가 도달 가능성)
                             bool showAlert = (x < 0 && predictedMinPrice > 0 && predictedMinPrice <= crashPrice);
 
-                            // [!] 5단계: (Point 4) 1주 로직 적용
+                            // [수정] 1주 미만 올림 처리 (Ceiling Logic)
                             final String displayQty;
-                            if (crashQty < 1.0 && crashQty > 0) {
+                            if (crashQty > 0 && crashQty < 1.0) {
                               displayQty = "1 주";
                             } else {
                               displayQty = "${crashQty.toStringAsFixed(2)} 주";
@@ -1817,12 +1816,12 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
 
                             crashBuyDirectives.add(
                               _buildDirectiveRow(
-                                '지정가 (평단*${(ratio * 100).toStringAsFixed(2)}%):', // (★3단계-1★) LOC->지정가
-                                '${crashPrice.toStringAsFixed(0)} 원 X $displayQty', // [!] displayQty 적용
-                                valueColor: showAlert ? Colors.red.shade900 : Colors.red.shade700, // (★3단계-3★)
+                                '감시 예약 (평단*${(ratio * 100).toStringAsFixed(2)}%):', // [수정] 용어 변경
+                                '${crashPrice.toStringAsFixed(0)} 원 X $displayQty',
+                                valueColor: showAlert ? Colors.red.shade900 : Colors.red.shade700,
                                 textColor: textColor,
                                 subTextColor: subTextColor,
-                                isBold: showAlert, // (★3단계-3★)
+                                isBold: showAlert,
                               ),
                             );
                           }
@@ -1831,7 +1830,6 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                // [!] 5단계: 이름 "폭락장"으로 되돌리기
                                 '+@ 폭락장 대비 추가 매수 (순수원금의 30% 분배)',
                                 style: TextStyle(
                                     fontWeight: FontWeight.bold, color: textColor)),
