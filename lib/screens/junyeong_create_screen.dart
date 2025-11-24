@@ -20,7 +20,9 @@ class _JunyeongCreateScreenState extends State<JunyeongCreateScreen> {
   final _targetProfitRateController = TextEditingController();
   final _currentPriceController = TextEditingController();
 
-  final _usMarketRateController = TextEditingController();
+  final _usCloseRateController = TextEditingController(); // [신규] 종가
+  final _afterMarketRateController = TextEditingController(); // [신규] 장외
+
   final _starValueController = TextEditingController();
 
   bool _isLoading = false;
@@ -59,8 +61,11 @@ class _JunyeongCreateScreenState extends State<JunyeongCreateScreen> {
       final double currentPrice =
           double.tryParse(_currentPriceController.text) ?? 0.0;
 
-      final double initialUsMarketRate =
-          double.tryParse(_usMarketRateController.text) ?? 0.0;
+      final double initialUsClose =
+          double.tryParse(_usCloseRateController.text) ?? 0.0;
+      final double initialAfterMarket =
+          double.tryParse(_afterMarketRateController.text) ?? 0.0;
+      
       final double starValue =
           double.tryParse(_starValueController.text) ?? 0.0;
 
@@ -104,9 +109,11 @@ class _JunyeongCreateScreenState extends State<JunyeongCreateScreen> {
 
         'type': 'junyeong', // (★핵심★)
 
-        'usMarketRate': initialUsMarketRate,
+        'usCloseRate': initialUsClose,
+        'afterMarketRate': initialAfterMarket,
+        // 'usMarketRate': initialUsMarketRate, // 삭제 (더 이상 저장 안 함)
 
-        'starValue': starValue, 
+        'starValue': starValue,
 
         'kMin': kMin,
         'kMax': kMax,
@@ -164,7 +171,8 @@ class _JunyeongCreateScreenState extends State<JunyeongCreateScreen> {
     _splitCountController.dispose();
     _targetProfitRateController.dispose();
     _currentPriceController.dispose();
-    _usMarketRateController.dispose();
+    _usCloseRateController.dispose();
+    _afterMarketRateController.dispose();
     _starValueController.dispose(); 
     super.dispose();
   }
@@ -225,21 +233,45 @@ class _JunyeongCreateScreenState extends State<JunyeongCreateScreen> {
                 },
               ),
               const SizedBox(height: 16),
-              TextFormField(
-                controller: _usMarketRateController,
-                decoration: const InputDecoration(
-                  labelText: '최초 미장 등락율 (%) (필수)',
-                  helperText: '예: +3.5% -> 3.5, -5% -> -5.0',
-                ),
-                keyboardType:
-                    const TextInputType.numberWithOptions(signed: true, decimal: true),
-                validator: (value) {
-                  if (value == null || value.isEmpty) return '등락율을 입력하세요.';
-                  if (double.tryParse(value) == null) {
-                    return '유효한 숫자를 입력하세요. (예: -2.5)';
-                  }
-                  return null;
-                },
+              // [수정] 1-1단계: 입력 필드 2개로 분리 (Row 사용)
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _usCloseRateController,
+                      decoration: const InputDecoration(
+                        labelText: '[미국] 종가 (%)',
+                        helperText: '예: -1.5',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(
+                          signed: true, decimal: true),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) return '필수';
+                        if (double.tryParse(value) == null) return '숫자만';
+                        return null;
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _afterMarketRateController,
+                      decoration: const InputDecoration(
+                        labelText: '[장외] 선물 (%)',
+                        helperText: '예: 0.5',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(
+                          signed: true, decimal: true),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) return '필수';
+                        if (double.tryParse(value) == null) return '숫자만';
+                        return null;
+                      },
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
 

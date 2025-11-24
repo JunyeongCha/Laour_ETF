@@ -10,6 +10,8 @@ import 'package:laour_etf/widgets/cycle_detail/trade_input_dialog.dart';
 import 'package:laour_etf/widgets/cycle_detail/transaction_list.dart';
 import 'package:provider/provider.dart';
 import 'package:laour_etf/providers/theme_provider.dart';
+import 'package:laour_etf/junyeong_constants.dart'; // [추가]
+import 'package:laour_etf/junyeong_logic.dart';     // [추가]
 
 class JunyeongDetailScreen extends StatefulWidget {
   final String cycleId;
@@ -31,7 +33,12 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
   final _currentPriceController = TextEditingController(); // 현재 주가
   final _previousClosePriceController =
       TextEditingController(); // 어제 종가
-  final _usMarketRateController = TextEditingController(); // x% (미국장 등락율)
+  
+  // [수정] 1-1단계: 등락률 입력 분리 (종가 + 장외)
+  // final _usMarketRateController = TextEditingController(); // 삭제
+  final _usCloseRateController = TextEditingController(); // [신규] 미국 종가
+  final _afterMarketRateController = TextEditingController(); // [신규] 장외(After)
+  
   final _starValueController = TextEditingController(); // 3배수 Star 값
   final _shortTermBuyAmountController =
       TextEditingController(); // 단기 매수 금액
@@ -68,10 +75,13 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
         .orderBy('date', descending: true)
         .snapshots();
 
-    // 5대 입력값 리스너 추가
+  // 5대 입력값 리스너 추가
     _currentPriceController.addListener(_updateRealTimeProfit);
     _previousClosePriceController.addListener(_updateRealTimeProfit);
-    _usMarketRateController.addListener(_updateRealTimeProfit);
+    // [수정] 리스너 변경
+    // _usMarketRateController.addListener(_updateRealTimeProfit); // 삭제
+    _usCloseRateController.addListener(_updateRealTimeProfit); // [신규]
+    _afterMarketRateController.addListener(_updateRealTimeProfit); // [신규]
     _starValueController.addListener(_updateRealTimeProfit);
     _shortTermBuyAmountController.addListener(_updateRealTimeProfit);
 
@@ -84,8 +94,14 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
 
         _previousClosePriceController.text =
             (data['previousClosePrice'] as num?)?.toString() ?? '0.0';
-        _usMarketRateController.text =
-            (data['usMarketRate'] as num?)?.toString() ?? '0.0';
+            
+        // [수정] 저장된 종가/장외 데이터 로드 (없으면 0.0)
+        // 기존 'usMarketRate' 필드는 더 이상 사용하지 않거나, 마이그레이션 필요 시 처리
+        _usCloseRateController.text = 
+            (data['usCloseRate'] as num?)?.toString() ?? '0.0'; // [신규 필드]
+        _afterMarketRateController.text = 
+            (data['afterMarketRate'] as num?)?.toString() ?? '0.0'; // [신규 필드]
+            
         _starValueController.text =
             (data['starValue'] as num?)?.toString() ?? '0.0';
 
@@ -252,8 +268,13 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
       final bool isShortTerm = newTrade['isShortTerm']; //
       final int quantity = newTrade['quantity'];
       final String type = newTrade['type'];
-      final double x =
-          double.tryParse(_usMarketRateController.text) ?? 0.0; // 현재 x%
+      
+      // [수정] 1-1단계: x값 임시 계산 (단순 합산 -> 추후 로직으로 대체)
+      // 현재는 컨트롤러가 분리되었으므로, 임시로 두 값을 더해서 x로 씁니다. (에러 방지용)
+      // 1-2단계에서 진짜 X' 계산 로직이 들어갑니다.
+      final double tempClose = double.tryParse(_usCloseRateController.text) ?? 0.0;
+      final double tempAfter = double.tryParse(_afterMarketRateController.text) ?? 0.0;
+      final double x = tempClose + tempAfter; 
 
       // (★수정★) 매도 가능 수량 체크 (A/B 분리)
       if (type == 'sell') {
@@ -366,18 +387,22 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
     try {
       final double price =
           double.tryParse(_currentPriceController.text) ?? 0.0;
-      final double usRate =
-          double.tryParse(_usMarketRateController.text) ?? 0.0;
+      
+      // [수정] 분리된 입력값 파싱
+      final double usClose = double.tryParse(_usCloseRateController.text) ?? 0.0;
+      final double afterMarket = double.tryParse(_afterMarketRateController.text) ?? 0.0;
+      
       final double star = double.tryParse(_starValueController.text) ?? 0.0;
       final double prevClose =
           double.tryParse(_previousClosePriceController.text) ?? 0.0;
-      // '단기 매수 금액'은 저장하지 않음 (휘발성 추천값)
 
       await _cycleRef.update({
         'currentPrice': price,
-        'usMarketRate': usRate,
+        // [수정] DB 필드 변경 (usMarketRate -> usCloseRate, afterMarketRate)
+        'usCloseRate': usClose,
+        'afterMarketRate': afterMarket,
         'starValue': star,
-        'previousClosePrice': prevClose, //
+        'previousClosePrice': prevClose, 
       });
 
       if (mounted) {
@@ -590,12 +615,21 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
   void dispose() {
     _currentPriceController.removeListener(_updateRealTimeProfit);
     _previousClosePriceController.removeListener(_updateRealTimeProfit);
-    _usMarketRateController.removeListener(_updateRealTimeProfit);
+    // [수정] 리스너 해제
+    // _usMarketRateController.removeListener(_updateRealTimeProfit);
+    _usCloseRateController.removeListener(_updateRealTimeProfit);
+    _afterMarketRateController.removeListener(_updateRealTimeProfit);
+    
     _starValueController.removeListener(_updateRealTimeProfit);
     _shortTermBuyAmountController.removeListener(_updateRealTimeProfit);
+    
     _currentPriceController.dispose();
     _previousClosePriceController.dispose();
-    _usMarketRateController.dispose();
+    // [수정] 컨트롤러 해제
+    // _usMarketRateController.dispose();
+    _usCloseRateController.dispose();
+    _afterMarketRateController.dispose();
+    
     _starValueController.dispose();
     _shortTermBuyAmountController.dispose();
     _nameEditController.dispose();
@@ -683,8 +717,14 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
         final double previousClosePrice =
             double.tryParse(_previousClosePriceController.text) ??
                 0.0; // 어제 종가
-        final double x = double.tryParse(_usMarketRateController.text) ??
-            0.0; // x% (미국장)
+        
+        // [수정] 1-1단계: x값 임시 계산 (UI 렌더링용)
+        // 1-2단계에서 Logic 클래스로 정식 계산 예정
+        final double _tempClose = double.tryParse(_usCloseRateController.text) ?? 0.0;
+        final double _tempAfter = double.tryParse(_afterMarketRateController.text) ?? 0.0;
+        // 일단 단순 합산으로 x를 정의해둠 (에러 방지)
+        final double x = _tempClose + _tempAfter; 
+        
         final double starValue_3x =
             double.tryParse(_starValueController.text) ?? 0.0; // 3배수 Star
 
@@ -1003,12 +1043,40 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                     decoration: const InputDecoration(labelText: '어제 종가 (원)'),
                     keyboardType: TextInputType.number,
                   ),
-                  TextField(
-                    controller: _usMarketRateController, //
-                    decoration: const InputDecoration(labelText: '미국장 등락율 (x%)'),
-                    keyboardType: const TextInputType.numberWithOptions(
-                        signed: true, decimal: true),
+                  
+                  // [수정] 입력 필드 2개로 분리 (Row 사용)
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _usCloseRateController,
+                          decoration: const InputDecoration(
+                            labelText: '[미국] 종가 (%)',
+                            hintText: '예: -1.5',
+                            border: OutlineInputBorder(),
+                          ),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              signed: true, decimal: true),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: _afterMarketRateController,
+                          decoration: const InputDecoration(
+                            labelText: '[장외] 선물 (%)',
+                            hintText: '예: 0.5',
+                            border: OutlineInputBorder(),
+                          ),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              signed: true, decimal: true),
+                        ),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 8),
+
                   TextField(
                     controller: _starValueController, //
                     decoration: const InputDecoration(labelText: '오늘의 3배수 Star 값 (%)'),
