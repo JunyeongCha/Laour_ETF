@@ -678,10 +678,28 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
         final double oneTimeInvestment =
             (splitCount == 0) ? 0 : (totalSeed / splitCount);
 
-        // (B. k-Factors)
-        final double kMin = (data['kMin'] as num?)?.toDouble() ?? 3.185;
-        final double kMax = (data['kMax'] as num?)?.toDouble() ?? 3.185;
-        final double kAvg = (data['kAvg'] as num?)?.toDouble() ?? 3.185;
+        // [수정] 1. Logic 및 통계 데이터 우선 계산 (순서 이동)
+        // ------------------------------------------------------------------
+        final double _usCloseVal = double.tryParse(_usCloseRateController.text) ?? 0.0;
+        final double _afterMarketVal = double.tryParse(_afterMarketRateController.text) ?? 0.0;
+
+        // 1. 종목 타입 및 m값
+        final EtfType _etfType = getEtfType(name); 
+        final double _mValue = getM(_etfType, _usCloseVal, _afterMarketVal);
+
+        // 2. X' (미국 반영 총량) 계산
+        final double x = getXPrime(_usCloseVal, _afterMarketVal, _mValue);
+        
+        // 3. 종목별 리스트 가져오기 및 통계 산출
+        final Map<String, List<double>> _lists = getCycleLists(_etfType);
+        final KStats statsKf = getStats(_lists['kf']!); // 시초가 통계
+        final KStats statsK = getStats(_lists['k']!);   // 한계가 통계
+        final KStats statsKr = getStats(_lists['kr']!); // 회복가 통계
+
+        // [핵심] 구형 k 변수를 신형 통계값(Limit K)으로 완전 대체
+        final double kMin = statsK.min;
+        final double kAvg = statsK.avg;
+        final double kMax = statsK.max;
 
         // (★4단계 오류 수정★) kAvg를 선언한 '직후'에 실제 목표수익률 계산
         // [!] Step 4.1 + 6: kAvg를 곱하는 공식으로 "전부" 수정
@@ -718,20 +736,47 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
             double.tryParse(_previousClosePriceController.text) ??
                 0.0; // 어제 종가
         
-        // [수정] 1-2단계: Logic 파일 연동 및 진짜 X' 계산
+        // [수정] 1-3단계: 3가지 가격 범위 예측 (하락장 역전 고려)
         // ------------------------------------------------------------------
-        final double _usCloseVal = double.tryParse(_usCloseRateController.text) ?? 0.0;
-        final double _afterMarketVal = double.tryParse(_afterMarketRateController.text) ?? 0.0;
-
-        // 1. 종목 타입 파악
-        final EtfType _etfType = getEtfType(name); // DB에 저장된 'name' 사용
-
-        // 2. m값 계산
-        final double _mValue = getM(_etfType, _usCloseVal, _afterMarketVal);
-
-        // 3. X' (미국 반영 총량) 계산 -> 이것이 진짜 x가 됨
-        final double x = getXPrime(_usCloseVal, _afterMarketVal, _mValue);
+        double _calcPrice(double currentX, double kFactor, double prevClose) {
+           return prevClose * (1 + (currentX * kFactor)/100); // 가격 공식
+        }
         
+        // 1. 예상 시초가 (Open)
+        double openPxMin, openPxMax, openPxAvg;
+        if (x >= 0) {
+           openPxMin = _calcPrice(x, statsKf.min, previousClosePrice);
+           openPxMax = _calcPrice(x, statsKf.max, previousClosePrice);
+        } else {
+           openPxMin = _calcPrice(x, statsKf.max, previousClosePrice); // 하락폭 큰게 Min
+           openPxMax = _calcPrice(x, statsKf.min, previousClosePrice);
+        }
+        openPxAvg = _calcPrice(x, statsKf.avg, previousClosePrice);
+        
+        // 2. 예상 한계가 (Limit) -> 매수 타점
+        double limitPxMin, limitPxMax, limitPxAvg;
+        double limitRateAvg = x * statsK.avg; // % 표시용
+        if (x >= 0) {
+           limitPxMin = _calcPrice(x, statsK.min, previousClosePrice);
+           limitPxMax = _calcPrice(x, statsK.max, previousClosePrice);
+        } else {
+           limitPxMin = _calcPrice(x, statsK.max, previousClosePrice);
+           limitPxMax = _calcPrice(x, statsK.min, previousClosePrice);
+        }
+        limitPxAvg = _calcPrice(x, statsK.avg, previousClosePrice);
+
+        // 3. 예상 회복가 (Recover) -> 매도 타점
+        double recoverPxMin, recoverPxMax, recoverPxAvg;
+        if (x >= 0) {
+           recoverPxMin = _calcPrice(x, statsKr.min, previousClosePrice);
+           recoverPxMax = _calcPrice(x, statsKr.max, previousClosePrice);
+        } else {
+           recoverPxMin = _calcPrice(x, statsKr.max, previousClosePrice);
+           recoverPxMax = _calcPrice(x, statsKr.min, previousClosePrice);
+        }
+        recoverPxAvg = _calcPrice(x, statsKr.avg, previousClosePrice);
+        // ------------------------------------------------------------------
+
         final double starValue_3x =
             double.tryParse(_starValueController.text) ?? 0.0; // 3배수 Star
 
@@ -819,7 +864,7 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
 
         if (showTrackB && x > 0) {
           // 1순위: 시장가 매수
-          recommendedBuyAmount_B = oneTimeInvestment * (1 + ((x * kAvg)/5));
+          recommendedBuyAmount_B = oneTimeInvestment * (1 - ((x * kAvg)/500));
 
           // 2순위: 4분할 지정가 매도 (가격은 항상 계산)
           // 2순위: 5분할 지정가 매도 (가격은 항상 계산)
@@ -879,7 +924,7 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
           // 1순위: 4분할 지정가 매수 (Track B)
           // [!] 1단계 수정: 폭락 시 매수 금액 공식 완화 (/ 5)
           // [!] 2단계 수정: Track B 변수로 변경 (A -> B)
-          totalBuyAmount_B_Down = oneTimeInvestment * (1 - ((x * kAvg) / 5));
+          totalBuyAmount_B_Down = oneTimeInvestment * (1 - ((x * kAvg) / 500));
 
           // [!] 3단계 수정: 5분할 가격 공식 적용 (하락 시)
           final double kAvgRate_Fall = x * kAvg;
@@ -1107,60 +1152,56 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                 // (★3단계-1★) "오늘의 예측" 카드 (신규 추가)
                 // [!] Step 6: "오늘의 예측" 카드 (새 변수명 사용)
               // [!] 4단계: kAvg 기준 예측값 계산을 위해 Builder 위젯 추가
-              Builder(
-                builder: (context) {
-                  double kAvgRate = 0.0;
-                  double kAvgPrice = 0.0;
-                  if (x != 0 && previousClosePrice > 0) {
-                    kAvgRate = x * kAvg;
-                    kAvgPrice = previousClosePrice * (1 + (kAvgRate / 100));
-                  }
-                  
-                  // (★3단계-1★) "오늘의 예측" 카드 (신규 추가)
-                  // [!] Step 6: "오늘의 예측" 카드 (새 변수명 사용)
-                  return _buildInfoCard( // [!] 괄호()로 변경
-                    "오늘의 예측 (Track B 기준)", 
+              // [수정] 1-3단계: 3가지(시초, 한계, 회복) 정밀 예측 UI
+                _buildInfoCard(
+                  "오늘의 예측 (K-Factor 적용)",
                   [
-                    _buildInfoRow(
-                      '예측 상승률:', 
-                      (x == 0 || previousClosePrice == 0) ? '0.00 % ~ 0.00 %' 
-                        : (x > 0 
-                          ? '${predKrMinRate.toStringAsFixed(2)} % ~ ${predKrMaxRate.toStringAsFixed(2)} %' // [!] 새 변수
-                          : '${((predLowestPx / previousClosePrice - 1) * 100) // [!] 4번 수정: 순서 변경
-                            .toStringAsFixed(2)} % ~ ${((predHighestPx / previousClosePrice - 1) * 100) // [!] 4번 수정: 순서 변경
-                            .toStringAsFixed(2)} %' // [!] 새 변수
-                      ),
-                      valueColor: x > 0 ? Colors.red : (x < 0 ? Colors.blue.shade700 : textColor),
+                    // 1. 예상 시초가 (Kf)
+                    _buildPredictionRow(
+                      title: "예상 시초가 (Gap)",
+                      minPx: openPxMin,
+                      maxPx: openPxMax,
+                      avgPx: openPxAvg,
+                      avgRate: null, // 시초가는 % 표시 생략 (지저분함 방지)
+                      x: x,
                       textColor: textColor,
                       subTextColor: subTextColor,
-                      valueFontSize: 15.0, 
                     ),
-                    _buildInfoRow(
-                      '예측 주가:', 
-                      (x == 0 || previousClosePrice == 0) ? '${previousClosePrice.toStringAsFixed(0)} 원'
-                        : (x > 0 
-                          ? '${predKrMinPx.toStringAsFixed(0)} 원 ~ ${predKrMaxPx.toStringAsFixed(0)} 원' // [!] 새 변수
-                          : '${predLowestPx.toStringAsFixed(0)} 원 ~ ${predHighestPx.toStringAsFixed(0)} 원' // [!] 새 변수
-                        ),
-                          valueColor: x > 0 ? Colors.red : (x < 0 ? Colors.blue.shade700 : textColor),
-                          textColor: textColor,
-                          subTextColor: subTextColor,
-                          valueFontSize: 15.0, 
-                        ),
-                        // [!] 4단계: kAvg 기준 (참고) 라인 추가
-                        _buildInfoRow(
-                          'kAvg 기준 (참고):', 
-                          (x == 0 || previousClosePrice == 0) ? '-' 
-                            : '${kAvgRate.toStringAsFixed(2)} % (${kAvgPrice.toStringAsFixed(0)} 원)',
-                          valueColor: x > 0 ? Colors.red.shade300 : (x < 0 ? Colors.blue.shade300 : subTextColor),
-                          textColor: textColor,
-                          subTextColor: subTextColor,
-                          valueFontSize: 13.0, // 약간 작게
-                        ),
-                      ]
-                    );
-                  }
-                  ),
+                    const Divider(),
+                    
+                    // 2. 예상 한계가 (K) - 중요!
+                    _buildPredictionRow(
+                      title: "예상 한계가 (Limit)",
+                      minPx: limitPxMin,
+                      maxPx: limitPxMax,
+                      avgPx: limitPxAvg,
+                      avgRate: limitRateAvg, // % 표시 포함
+                      x: x,
+                      textColor: textColor,
+                      subTextColor: subTextColor,
+                      isMain: true, // 강조
+                    ),
+                    const Divider(),
+
+                    // 3. 예상 회복가 (Kr)
+                    _buildPredictionRow(
+                      title: "예상 회복가 (Recover)",
+                      minPx: recoverPxMin,
+                      maxPx: recoverPxMax,
+                      avgPx: recoverPxAvg,
+                      avgRate: null,
+                      x: x,
+                      textColor: textColor,
+                      subTextColor: subTextColor,
+                    ),
+                    
+                    const SizedBox(height: 8),
+                    Text(
+                      "* Min ~ Max는 통계적 범위(IQR)이며, Avg는 예측 평균값입니다.",
+                      style: TextStyle(color: subTextColor, fontSize: 11),
+                    ),
+                  ],
+                ),
 
                   // (★수정★) 평가 손익 카드 (듀얼 지갑)
                 _buildInfoCard("종합 평가 손익 (Unrealized)", [
@@ -1278,13 +1319,31 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                     textColor: textColor,
                     subTextColor: subTextColor,
                   ),
-                  // [!] K-Factor 디버그용 표시
+                  const Divider(height: 24),
+                  Text('K-Factor 통계 (Min / Avg / Max)',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 13)),
                   _buildInfoRow(
-                    'k(Min/Avg/Max):',
-                    '${kMin.toStringAsFixed(3)} / ${kAvg.toStringAsFixed(3)} / ${kMax.toStringAsFixed(3)}',
+                    'kf (시초):',
+                    '${statsKf.min.toStringAsFixed(2)} / ${statsKf.avg.toStringAsFixed(2)} / ${statsKf.max.toStringAsFixed(2)}',
                     textColor: textColor,
                     subTextColor: subTextColor,
-                    valueFontSize: 12.0, // 폰트 작게
+                    valueFontSize: 12.0,
+                  ),
+                  _buildInfoRow(
+                    'k (한계):',
+                    '${statsK.min.toStringAsFixed(2)} / ${statsK.avg.toStringAsFixed(2)} / ${statsK.max.toStringAsFixed(2)}',
+                    textColor: textColor,
+                    subTextColor: subTextColor,
+                    valueFontSize: 12.0,
+                    // (강조) 한계값은 매매의 기준이 됨
+                    valueColor: Colors.blue.shade700, 
+                  ),
+                  _buildInfoRow(
+                    'kr (회복):',
+                    '${statsKr.min.toStringAsFixed(2)} / ${statsKr.avg.toStringAsFixed(2)} / ${statsKr.max.toStringAsFixed(2)}',
+                    textColor: textColor,
+                    subTextColor: subTextColor,
+                    valueFontSize: 12.0,
                   ),
                   const Divider(height: 24),
                   Text('Track A: 장기 누적',
@@ -1958,6 +2017,66 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                 fontSize: 13,
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+  // [신규] 1-3단계: 예측 정보 전용 행 위젯
+  Widget _buildPredictionRow({
+    required String title,
+    required double minPx,
+    required double maxPx,
+    required double avgPx,
+    double? avgRate, // null이면 표시 안 함
+    required double x,
+    required Color textColor,
+    required Color subTextColor,
+    bool isMain = false, // 한계가 강조용
+  }) {
+    final NumberFormat currencyFormat = NumberFormat('#,##0', 'ko_KR');
+    final Color valueColor = x > 0 ? Colors.red : (x < 0 ? Colors.blue.shade700 : textColor);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 1. 제목 (예: 예상 시초가)
+          Text(title, style: TextStyle(color: subTextColor, fontSize: 14, fontWeight: isMain ? FontWeight.bold : FontWeight.normal)),
+          const SizedBox(height: 4),
+          
+          // 2. 범위 (Min ~ Max)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text("범위:", style: TextStyle(color: subTextColor, fontSize: 13)),
+              Text(
+                "${currencyFormat.format(minPx)} ~ ${currencyFormat.format(maxPx)} 원",
+                style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 15),
+              ),
+            ],
+          ),
+          
+          // 3. 예측 (Avg)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text("예측 (Avg):", style: TextStyle(color: subTextColor, fontSize: 13)),
+              Row(
+                children: [
+                  if (avgRate != null)
+                    Text(
+                      "(${avgRate.toStringAsFixed(2)}%) ",
+                      style: TextStyle(color: valueColor, fontSize: 13),
+                    ),
+                  Text(
+                    "${currencyFormat.format(avgPx)} 원",
+                    style: TextStyle(color: valueColor, fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                ],
+              ),
+            ],
           ),
         ],
       ),
