@@ -1428,177 +1428,275 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
                   ),
 
                 // [!] Case 1: 3% 초과 상승 시
+                // [!] Case 1: 3% 초과 상승 시 (Bull Market)
                 if (showTrackB && x > 0) ...[
-                  // [!] _buildSectionTitle 제거
-                  _buildInfoCard( // [!] 괄호()로 변경
-                    // [!] 용어 수정: 시초가 -> 시장가
-                    '📈 1순위: Track B 시장가 매수 (단기)', 
-                    [
-                      Text('오늘 9시 정각, \'시장가\' 주문을 실행하세요.', style: TextStyle(color: subTextColor, fontSize: 13)),
-                      const SizedBox(height: 8),
-                      _buildInfoRow(
-                          '매수 추천 금액',
-                          '${NumberFormat('#,##0', 'ko_KR').format(recommendedBuyAmount_B)} 원',
-                          // [!] 3번째 인자(Colors.red)에 valueColor: 추가
-                          valueColor: Colors.red,
-                          textColor: textColor,
-                          subTextColor: subTextColor,
+                  // ---------------------------------------------------------
+                  // 1순위: Track B 시장가 매수 (단기)
+                  // ---------------------------------------------------------
+                  Builder(
+                    builder: (context) {
+                      // 1. 매수 추천 금액 계산 (급등 시 비중 축소: 1 - ...)
+                      // 공식: 1회 투자금 * (1 - (X' * kAvg / 100 / 5))
+                      double buyAmount = oneTimeInvestment * (1 - ((x * kAvg) / 100) / 5);
+                      if (buyAmount < 0) buyAmount = 0; // 방어 코드
+
+                      // 2. 예상 매수 수량 범위 계산 (시초가 범위 활용)
+                      // 시초가가 낮으면(Min) 많이 사지고(MaxQty), 높으면(Max) 적게 사짐(MinQty)
+                      double estBuyQtyMin = 0.0;
+                      double estBuyQtyMax = 0.0;
+                      if (openPxMax > 0) estBuyQtyMin = buyAmount / openPxMax;
+                      if (openPxMin > 0) estBuyQtyMax = buyAmount / openPxMin;
+
+                      return _buildInfoCard(
+                        '📈 1순위: Track B 시장가 매수 (단기)',
+                        [
+                          Text('오늘 9시 정각, \'시장가\' 주문을 실행하세요.', 
+                              style: TextStyle(color: subTextColor, fontSize: 13)),
+                          const SizedBox(height: 12),
+                          
+                          // 투입 시드
+                          _buildInfoRow(
+                            '투입 시드:',
+                            '${NumberFormat('#,##0', 'ko_KR').format(buyAmount)} 원',
+                            valueColor: Colors.red,
+                            textColor: textColor,
+                            subTextColor: subTextColor,
                           ),
-                      // [!] v3.0의 '단기 매수 금액' 수동 입력 TextField 제거
-                    ],
+                          // 예상 시초가 (참고용)
+                          _buildInfoRow(
+                            '예상 시초가:',
+                            '${NumberFormat('#,##0', 'ko_KR').format(openPxMin)} ~ ${NumberFormat('#,##0', 'ko_KR').format(openPxMax)} 원',
+                            textColor: textColor,
+                            subTextColor: subTextColor,
+                            valueFontSize: 14.0,
+                          ),
+                          // 예상 수량 (범위)
+                          _buildInfoRow(
+                            '예상 수량:',
+                            '${estBuyQtyMin.toStringAsFixed(2)} ~ ${estBuyQtyMax.toStringAsFixed(2)} 주',
+                            valueColor: Colors.blue.shade700,
+                            textColor: textColor,
+                            subTextColor: subTextColor,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            "* 실제 체결가(시초가)에 따라 수량은 변동됩니다.",
+                            style: TextStyle(color: subTextColor, fontSize: 11),
+                          ),
+                        ],
+                      );
+                    }
                   ),
-                  // 2순위: 4분할 지정가 매도
-                  _buildInfoCard( // [!] 괄호()로 변경
-                      // [!] 3단계 수정: 5분할 (15/20/30/20/15)
-                      '📈 2순위: Track B 5분할 지정가 매도 (15/20/30/20/15)', 
-                      [
-                        Text(
-                          '아래 5개의 지정가 매도 주문을 (당일 유효)로 거세요.',
-                          style: TextStyle(color: subTextColor, fontSize: 13),
+
+                  // ---------------------------------------------------------
+                  // 2순위: Track B 5분할 지정가 매도 (15/20/30/20/15)
+                  // ---------------------------------------------------------
+                  Builder(
+                    builder: (context) {
+                      // 1. 가격 타점 계산 (Recover 범위 활용)
+                      // Px1(Min) -> Px3(Avg) -> Px5(Max)
+                      double sellPx1 = recoverPxMin;
+                      double sellPx5 = recoverPxMax;
+                      double sellPx3 = recoverPxAvg;
+                      double sellPx2 = (sellPx1 + sellPx3) / 2; // 보간
+                      double sellPx4 = (sellPx3 + sellPx5) / 2; // 보간
+
+                      // 2. 수량 기준 설정 (보유량 우선, 없으면 예측량 평균 사용)
+                      double baseQty = 0.0;
+                      bool isPrediction = false; // 예측 수량인지 여부
+
+                      if (currentQuantity_B > 0) {
+                        baseQty = currentQuantity_B.toDouble();
+                      } else {
+                        // 매수 전이면 '예측 매수 수량의 평균값'을 기준으로 보여줌
+                        // 매수 금액 재계산 필요
+                        double buyAmt = oneTimeInvestment * (1 - ((x * kAvg) / 100) / 5);
+                        if (openPxAvg > 0) baseQty = buyAmt / openPxAvg;
+                        isPrediction = true;
+                      }
+
+                      // 3. 5분할 수량 계산 (15-20-30-20-15)
+                      double q1 = baseQty * 0.15;
+                      double q2 = baseQty * 0.20;
+                      double q3 = baseQty * 0.30;
+                      double q4 = baseQty * 0.20;
+                      double q5 = baseQty * 0.15;
+
+                      // 1주 미만 올림 처리를 위한 헬퍼 함수
+                      String formatQty(double qty) {
+                        if (qty > 0 && qty < 1.0) return "1 주";
+                        return "${qty.toStringAsFixed(2)} 주";
+                      }
+
+                      return _buildInfoCard(
+                        '📈 2순위: Track B 5분할 지정가 매도',
+                        [
+                          Text(
+                            '아래 5개의 지정가 매도 주문을 (당일 유효)로 거세요.',
+                            style: TextStyle(color: subTextColor, fontSize: 13),
                           ),
-                        // [!] 로직 2: 롤오버 경고 문구 추가
-                        if (currentQuantity_B > 0)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4.0),
-                            child: Text(
-                              '(어제 물량이라면 롤오버 부탁드립니다)',
-                              style: TextStyle(color: Colors.orange.shade700, fontSize: 12, fontWeight: FontWeight.bold),
+                          if (isPrediction)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4.0, bottom: 8.0),
+                              child: Text(
+                                '(매수 체결 후 실제 수량에 맞춰 조정하세요)',
+                                style: TextStyle(color: Colors.orange.shade700, fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
                             ),
-                          ),
-                        const SizedBox(height: 8),
-                        _buildDirectiveRow(
-                            '1차 (15%):',
-                            // [!] 5.5단계: 1주 미만 올림 로직
-                            '${NumberFormat('#,##0.00', 'ko_KR').format(sellTargetPx1_B)} 원 / ${(sellQty1_B < 1.0 && sellQty1_B > 0) ? "1 주" : "${sellQty1_B.toStringAsFixed(2)} 주"}',
-                            valueColor: Colors.blue.shade700,
-                            textColor: textColor,
-                            subTextColor: subTextColor,
+                          // 롤오버 경고 (보유량이 있을 때만)
+                          if (!isPrediction && currentQuantity_B > 0)
+                             Padding(
+                              padding: const EdgeInsets.only(top: 4.0, bottom: 8.0),
+                              child: Text(
+                                '(어제 물량이라면 롤오버 부탁드립니다)',
+                                style: TextStyle(color: Colors.red.shade400, fontSize: 12),
+                              ),
                             ),
-                        _buildDirectiveRow(
-                            '2차 (20%):',
-                            '${NumberFormat('#,##0.00', 'ko_KR').format(sellTargetPx2_B)} 원 / ${(sellQty2_B < 1.0 && sellQty2_B > 0) ? "1 주" : "${sellQty2_B.toStringAsFixed(2)} 주"}',
-                            valueColor: Colors.blue.shade700,
-                            textColor: textColor,
-                            subTextColor: subTextColor,
-                            ),
-                        _buildDirectiveRow(
-                            '3차 (30%):',
-                            '${NumberFormat('#,##0.00', 'ko_KR').format(sellTargetPx3_B)} 원 / ${(sellQty3_B < 1.0 && sellQty3_B > 0) ? "1 주" : "${sellQty3_B.toStringAsFixed(2)} 주"}',
-                            valueColor: Colors.blue.shade700,
-                            textColor: textColor,
-                            subTextColor: subTextColor,
-                            ),
-                        _buildDirectiveRow(
-                            '4차 (20%):',
-                            '${NumberFormat('#,##0.00', 'ko_KR').format(sellTargetPx4_B)} 원 / ${(sellQty4_B < 1.0 && sellQty4_B > 0) ? "1 주" : "${sellQty4_B.toStringAsFixed(2)} 주"}',
-                            valueColor: Colors.blue.shade700,
-                            textColor: textColor,
-                            subTextColor: subTextColor,
-                            ),
-                        _buildDirectiveRow(
-                            '5차 (15%):',
-                            '${NumberFormat('#,##0.00', 'ko_KR').format(sellTargetPx5_B)} 원 / ${(sellQty5_B < 1.0 && sellQty5_B > 0) ? "1 주" : "${sellQty5_B.toStringAsFixed(2)} 주"}',
-                            valueColor: Colors.blue.shade700,
-                            textColor: textColor,
-                            subTextColor: subTextColor,
-                            ),
-                      ],
-                    ),
+                          
+                          const SizedBox(height: 8),
+                          
+                          _buildDirectiveRow('1차 (15%):', '${NumberFormat('#,##0', 'ko_KR').format(sellPx1)} 원 / ${formatQty(q1)}', 
+                              valueColor: Colors.blue.shade700, textColor: textColor, subTextColor: subTextColor),
+                          _buildDirectiveRow('2차 (20%):', '${NumberFormat('#,##0', 'ko_KR').format(sellPx2)} 원 / ${formatQty(q2)}', 
+                              valueColor: Colors.blue.shade700, textColor: textColor, subTextColor: subTextColor),
+                          _buildDirectiveRow('3차 (30%):', '${NumberFormat('#,##0', 'ko_KR').format(sellPx3)} 원 / ${formatQty(q3)}', 
+                              valueColor: Colors.blue.shade700, textColor: textColor, subTextColor: subTextColor),
+                          _buildDirectiveRow('4차 (20%):', '${NumberFormat('#,##0', 'ko_KR').format(sellPx4)} 원 / ${formatQty(q4)}', 
+                              valueColor: Colors.blue.shade700, textColor: textColor, subTextColor: subTextColor),
+                          _buildDirectiveRow('5차 (15%):', '${NumberFormat('#,##0', 'ko_KR').format(sellPx5)} 원 / ${formatQty(q5)}', 
+                              valueColor: Colors.blue.shade700, textColor: textColor, subTextColor: subTextColor),
+                        ],
+                      );
+                    }
+                  ),
                 ],
 
                 // [!] Case 2: 3% 초과 하락 시
                 // [!] Case 2: 3% 초과 하락 시
                 // [!] Case 2: 3% 초과 하락 시
+                // [!] Case 2: 3% 초과 하락 시 (Bear Market)
                 if (showTrackB && x < 0) ...[
-                  // [!] _buildSectionTitle 제거
-                  // 1순위: 4분할 지정가 매수 (Track B)
-                  _buildInfoCard( // [!] 괄호()로 변경
-                    // [!] 3단계 수정: 5분할 (15/20/30/20/15)
-                    '📉 1순위: Track B 5분할 지정가 매수 (15/20/30/20/15)', 
-                    [
-                      Text(
-                        // [!] 2단계 수정: 변수명 변경 (A -> B)
-                        '오늘 장중에 아래 5개의 지정가 매수 주문을 (당일 유효)로 거세요. (총 매수 예산: ${totalBuyAmount_B_Down.toStringAsFixed(0)}원)',
-                        style: TextStyle(color: subTextColor, fontSize: 13),
-                        ),
-                      const SizedBox(height: 8),
-                      _buildDirectiveRow(
-                          '1차 (15%):',
-                          // [!] 5.5단계: 1주 미만 올림 로직
-                          '${NumberFormat('#,##0.00', 'ko_KR').format(buyTargetPx1_B_Down)} 원 / ${(buyQty1_B_Down < 1.0 && buyQty1_B_Down > 0) ? "1 주" : "${buyQty1_B_Down.toStringAsFixed(2)} 주"}',
-                          valueColor: Colors.red.shade700,
-                          textColor: textColor,
-                          subTextColor: subTextColor,
+                  // ---------------------------------------------------------
+                  // 1순위: Track B 5분할 지정가 매수 (15/20/30/20/15)
+                  // ---------------------------------------------------------
+                  Builder(
+                    builder: (context) {
+                      // 1. 매수 예산 계산 (폭락 시 비중 확대: 1 + |...|)
+                      // x가 음수이므로 (1 - (음수)) = 1 + 양수
+                      double buyBudget = oneTimeInvestment * (1 - ((x * kAvg) / 100) / 5);
+                      
+                      // 2. 가격 타점 계산 (Limit 범위 활용 - 이미 역전 로직 적용됨)
+                      // Px1(Min) -> Px5(Max)
+                      double buyPx1 = limitPxMin; // 가장 낮은 가격 (많이 떨어진 가격)
+                      double buyPx5 = limitPxMax; // 가장 높은 가격 (덜 떨어진 가격)
+                      double buyPx3 = limitPxAvg;
+                      double buyPx2 = (buyPx1 + buyPx3) / 2;
+                      double buyPx4 = (buyPx3 + buyPx5) / 2;
+
+                      // 3. 수량 계산 (총 예산을 비율대로 쪼개서 각 가격으로 나눔)
+                      // 비율: 15 / 20 / 30 / 20 / 15
+                      double q1 = (buyBudget * 0.15) / buyPx1;
+                      double q2 = (buyBudget * 0.20) / buyPx2;
+                      double q3 = (buyBudget * 0.30) / buyPx3;
+                      double q4 = (buyBudget * 0.20) / buyPx4;
+                      double q5 = (buyBudget * 0.15) / buyPx5;
+
+                      // 1주 미만 올림 헬퍼
+                      String formatQty(double qty) {
+                        if (qty > 0 && qty < 1.0) return "1 주";
+                        return "${qty.toStringAsFixed(2)} 주";
+                      }
+
+                      return _buildInfoCard(
+                        '📉 1순위: Track B 5분할 지정가 매수',
+                        [
+                          Text(
+                            '오늘 장중에 아래 5개의 지정가 매수 주문을 (당일 유효)로 거세요.',
+                            style: TextStyle(color: subTextColor, fontSize: 13),
                           ),
-                      _buildDirectiveRow(
-                          '2차 (20%):',
-                          '${NumberFormat('#,##0.00', 'ko_KR').format(buyTargetPx2_B_Down)} 원 / ${(buyQty2_B_Down < 1.0 && buyQty2_B_Down > 0) ? "1 주" : "${buyQty2_B_Down.toStringAsFixed(2)} 주"}',
-                          valueColor: Colors.red.shade700,
-                          textColor: textColor,
-                          subTextColor: subTextColor,
+                          const SizedBox(height: 8),
+                          _buildInfoRow(
+                            '총 매수 예산:', 
+                            '${NumberFormat('#,##0', 'ko_KR').format(buyBudget)} 원',
+                            valueColor: Colors.red,
+                            textColor: textColor,
+                            subTextColor: subTextColor
                           ),
-                      _buildDirectiveRow(
-                          '3차 (30%):',
-                          '${NumberFormat('#,##0.00', 'ko_KR').format(buyTargetPx3_B_Down)} 원 / ${(buyQty3_B_Down < 1.0 && buyQty3_B_Down > 0) ? "1 주" : "${buyQty3_B_Down.toStringAsFixed(2)} 주"}',
-                          valueColor: Colors.red.shade700,
-                          textColor: textColor,
-                          subTextColor: subTextColor,
-                          ),
-                      _buildDirectiveRow(
-                          '4차 (20%):',
-                          '${NumberFormat('#,##0.00', 'ko_KR').format(buyTargetPx4_B_Down)} 원 / ${(buyQty4_B_Down < 1.0 && buyQty4_B_Down > 0) ? "1 주" : "${buyQty4_B_Down.toStringAsFixed(2)} 주"}',
-                          valueColor: Colors.red.shade700,
-                          textColor: textColor,
-                          subTextColor: subTextColor,
-                          ),
-                      _buildDirectiveRow(
-                          '5차 (15%):',
-                          '${NumberFormat('#,##0.00', 'ko_KR').format(buyTargetPx5_B_Down)} 원 / ${(buyQty5_B_Down < 1.0 && buyQty5_B_Down > 0) ? "1 주" : "${buyQty5_B_Down.toStringAsFixed(2)} 주"}',
-                          valueColor: Colors.red.shade700,
-                          textColor: textColor,
-                          subTextColor: subTextColor,
-                          ),
-                    ],
+                          const SizedBox(height: 4),
+
+                          _buildDirectiveRow('1차 (15%):', '${NumberFormat('#,##0', 'ko_KR').format(buyPx1)} 원 / ${formatQty(q1)}', 
+                              valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
+                          _buildDirectiveRow('2차 (20%):', '${NumberFormat('#,##0', 'ko_KR').format(buyPx2)} 원 / ${formatQty(q2)}', 
+                              valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
+                          _buildDirectiveRow('3차 (30%):', '${NumberFormat('#,##0', 'ko_KR').format(buyPx3)} 원 / ${formatQty(q3)}', 
+                              valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
+                          _buildDirectiveRow('4차 (20%):', '${NumberFormat('#,##0', 'ko_KR').format(buyPx4)} 원 / ${formatQty(q4)}', 
+                              valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
+                          _buildDirectiveRow('5차 (15%):', '${NumberFormat('#,##0', 'ko_KR').format(buyPx5)} 원 / ${formatQty(q5)}', 
+                              valueColor: Colors.red.shade700, textColor: textColor, subTextColor: subTextColor),
+                        ],
+                      );
+                    }
                   ),
-                  // 2순위: 회복 시 2분할 지정가 매도
-                  // 2순위: 회복 시 2분할 지정가 매도
-                  _buildInfoCard( // [!] 괄호()로 변경
-                    // [!] 2단계 수정: 지갑 변경 (Track A -> B) 및 제목 수정
-                    '📉 2순위: Track B 회복시 2분할 지정가 매도', 
-                    [
-                      Text(
-                      '1순위 매수와 함께, 단기 반등을 위한 매도 주문을 (당일 유효)로 거세요.',
-                      style: TextStyle(color: subTextColor, fontSize: 13),
-                      ),
-                      // [!] 2단계 수정: 롤오버 안내 문구 추가
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4.0),
-                        child: Text(
-                          '(미체결 시 익일 롤오버 권장)',
-                          style: TextStyle(color: Colors.orange.shade700, fontSize: 12, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      _buildDirectiveRow(
-                          '1차 (50%):',
-                          // [!] 2단계 수정: 변수명 변경 및 퍼센트 표시 로직
-                          (sellRecoverQty1_B > 0)
-                            ? '${NumberFormat('#,##0.00', 'ko_KR').format(sellRecoverPx1_B)} 원 / ${sellRecoverQty1_B.toStringAsFixed(2)} 주'
-                            : '${NumberFormat('#,##0.00', 'ko_KR').format(sellRecoverPx1_B)} 원 / (매수 물량의 50%)',
-                          valueColor: Colors.blue.shade700,
-                          textColor: textColor,
-                          subTextColor: subTextColor,
+
+                  // ---------------------------------------------------------
+                  // 2순위: Track B 회복시 5분할 지정가 매도
+                  // ---------------------------------------------------------
+                  Builder(
+                    builder: (context) {
+                      // 1. 매도 기준 수량 추정 (1순위 매수가 다 체결되었다고 가정)
+                      // 정확한 계산을 위해 예산을 평균단가로 나눔
+                      double buyBudget = oneTimeInvestment * (1 - ((x * kAvg) / 100) / 5);
+                      double estimatedTotalQty = (limitPxAvg > 0) ? (buyBudget / limitPxAvg) : 0.0;
+
+                      // 2. 가격 타점 계산 (Recover 범위 활용)
+                      // Px1(Min) -> Px5(Max)
+                      double sellPx1 = recoverPxMin;
+                      double sellPx5 = recoverPxMax;
+                      double sellPx3 = recoverPxAvg;
+                      double sellPx2 = (sellPx1 + sellPx3) / 2;
+                      double sellPx4 = (sellPx3 + sellPx5) / 2;
+
+                      // 3. 수량 분배 (15/20/30/20/15)
+                      double q1 = estimatedTotalQty * 0.15;
+                      double q2 = estimatedTotalQty * 0.20;
+                      double q3 = estimatedTotalQty * 0.30;
+                      double q4 = estimatedTotalQty * 0.20;
+                      double q5 = estimatedTotalQty * 0.15;
+
+                      String formatQty(double qty) {
+                        if (qty > 0 && qty < 1.0) return "1 주";
+                        return "${qty.toStringAsFixed(2)} 주";
+                      }
+
+                      return _buildInfoCard(
+                        '📉 2순위: Track B 회복시 5분할 지정가 매도',
+                        [
+                          Text(
+                            '1순위 매수와 함께, 단기 반등을 위한 매도 주문을 (당일 유효)로 거세요.',
+                            style: TextStyle(color: subTextColor, fontSize: 13),
                           ),
-                      _buildDirectiveRow(
-                          '2차 (50%):',
-                          (sellRecoverQty2_B > 0)
-                            ? '${NumberFormat('#,##0.00', 'ko_KR').format(sellRecoverPx2_B)} 원 / ${sellRecoverQty2_B.toStringAsFixed(2)} 주'
-                            : '${NumberFormat('#,##0.00', 'ko_KR').format(sellRecoverPx2_B)} 원 / (매수 물량의 50%)',
-                          valueColor: Colors.blue.shade700,
-                          textColor: textColor,
-                          subTextColor: subTextColor,
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4.0, bottom: 8.0),
+                            child: Text(
+                              '(미체결 시 익일 롤오버 권장 / 예상 수량 기준)',
+                              style: TextStyle(color: Colors.orange.shade700, fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
                           ),
-                    ],
+                          
+                          _buildDirectiveRow('1차 (15%):', '${NumberFormat('#,##0', 'ko_KR').format(sellPx1)} 원 / ${formatQty(q1)}', 
+                              valueColor: Colors.blue.shade700, textColor: textColor, subTextColor: subTextColor),
+                          _buildDirectiveRow('2차 (20%):', '${NumberFormat('#,##0', 'ko_KR').format(sellPx2)} 원 / ${formatQty(q2)}', 
+                              valueColor: Colors.blue.shade700, textColor: textColor, subTextColor: subTextColor),
+                          _buildDirectiveRow('3차 (30%):', '${NumberFormat('#,##0', 'ko_KR').format(sellPx3)} 원 / ${formatQty(q3)}', 
+                              valueColor: Colors.blue.shade700, textColor: textColor, subTextColor: subTextColor),
+                          _buildDirectiveRow('4차 (20%):', '${NumberFormat('#,##0', 'ko_KR').format(sellPx4)} 원 / ${formatQty(q4)}', 
+                              valueColor: Colors.blue.shade700, textColor: textColor, subTextColor: subTextColor),
+                          _buildDirectiveRow('5차 (15%):', '${NumberFormat('#,##0', 'ko_KR').format(sellPx5)} 원 / ${formatQty(q5)}', 
+                              valueColor: Colors.blue.shade700, textColor: textColor, subTextColor: subTextColor),
+                        ],
+                      );
+                    }
                   ),
                 ],
                 // [Bug 1, 3] 알림 로직 (올바른 위치로 이동)
