@@ -718,12 +718,19 @@ class _JunyeongDetailScreenState extends State<JunyeongDetailScreen> {
             double.tryParse(_previousClosePriceController.text) ??
                 0.0; // 어제 종가
         
-        // [수정] 1-1단계: x값 임시 계산 (UI 렌더링용)
-        // 1-2단계에서 Logic 클래스로 정식 계산 예정
-        final double _tempClose = double.tryParse(_usCloseRateController.text) ?? 0.0;
-        final double _tempAfter = double.tryParse(_afterMarketRateController.text) ?? 0.0;
-        // 일단 단순 합산으로 x를 정의해둠 (에러 방지)
-        final double x = _tempClose + _tempAfter; 
+        // [수정] 1-2단계: Logic 파일 연동 및 진짜 X' 계산
+        // ------------------------------------------------------------------
+        final double _usCloseVal = double.tryParse(_usCloseRateController.text) ?? 0.0;
+        final double _afterMarketVal = double.tryParse(_afterMarketRateController.text) ?? 0.0;
+
+        // 1. 종목 타입 파악
+        final EtfType _etfType = getEtfType(name); // DB에 저장된 'name' 사용
+
+        // 2. m값 계산
+        final double _mValue = getM(_etfType, _usCloseVal, _afterMarketVal);
+
+        // 3. X' (미국 반영 총량) 계산 -> 이것이 진짜 x가 됨
+        final double x = getXPrime(_usCloseVal, _afterMarketVal, _mValue);
         
         final double starValue_3x =
             double.tryParse(_starValueController.text) ?? 0.0; // 3배수 Star
