@@ -71,7 +71,7 @@ KStats getStats(List<double> rawData) {
 
   // [2-3단계 추가] 1. 절대 기준 필터링 (Pre-filtering)
   // 도메인 지식 기반: 2배수 레버리지의 k값은 이론적으로 0.66 근처여야 함.
-  // 0.2 미만(괴리율 심함), 2.0 초과(이상 과열), 0 이하(음수/역주행)는 즉시 제거.
+  // 0.0 미만(괴리율 심함), 2.0 초과(이상 과열), 0 이하(음수/역주행)는 즉시 제거.
   List<double> validData = rawData.where((val) {
     return val >= 0.0 && val <= 2.0;
   }).toList();
